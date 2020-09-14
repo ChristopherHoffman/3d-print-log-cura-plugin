@@ -9,6 +9,8 @@ from typing import cast, Optional, Set, TYPE_CHECKING
 
 from PyQt5.QtCore import pyqtSlot, QObject
 from PyQt5.QtNetwork import QNetworkRequest
+from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtGui import QPixmap
 
 from UM.Extension import Extension
 from UM.Scene.Iterator.DepthFirstIterator import DepthFirstIterator
@@ -108,6 +110,10 @@ class TestSliceInfo(QObject, Extension):
         self._application.getPreferences().setValue(
             "3dprintlog_info/send_slice_info", enabled)
 
+    @pyqtSlot(str)
+    def sendTestMessage(self, message: str):
+        Logger.log("i", "Test Message Result [%s]", message)
+
     def _getUserModifiedSettingKeys(self) -> list:
         machine_manager = self._application.getMachineManager()
         global_stack = machine_manager.activeMachine
@@ -123,6 +129,29 @@ class TestSliceInfo(QObject, Extension):
 
     def _onWriteStarted(self, output_device):
         try:
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Information)
+            msgBox.setText("Would you like to send to 3Dprintlog.com?")
+            msgBox.setWindowTitle("Send to 3D Print Log?")
+            msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            msgBox.setDefaultButton(QMessageBox.Ok)
+
+            p = QPixmap()
+            plugin_path = PluginRegistry.getInstance().getPluginPath(self.getPluginId())
+            if not plugin_path:
+                Logger.log("e", "Could not get plugin path!",
+                           self.getPluginId())
+                return None
+            file_path = os.path.join(plugin_path, "3DPrintLog_logo_64px.jpg")
+            p.load(file_path)
+            msgBox.setIconPixmap(p)
+
+            returnValue = msgBox.exec()
+            if returnValue != QMessageBox.Ok:
+                Logger.log(
+                    "d", "User denied the prompt")
+                return  # Do nothing, user does not want to send data
+
             if not self._application.getPreferences().getValue("3dprintlog_info/send_slice_info"):
                 Logger.log(
                     "d", "'3dprintlog_info/send_slice_info' is turned off.")
