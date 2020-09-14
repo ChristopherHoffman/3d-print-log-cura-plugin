@@ -132,6 +132,7 @@ class TestSliceInfo(QObject, Extension):
             data = self.getCuraMetadata()
             data.update(self.getPrintTime())
             data.update(self.getPrintSettings())
+            data.update(self.getMaterialUsage())
             data["print_name"] = self.getPrintName()
 
             # Convert data to bytes
@@ -200,7 +201,7 @@ class TestSliceInfo(QObject, Extension):
     def getPrintTime(self):
         data = dict()
         print_information = self._application.getPrintInformation()
-        data["estimated_print_time"] = int(
+        data["estimated_print_time_seconds"] = int(
             print_information.currentPrintTime.getDisplayString(DurationFormat.Format.Seconds))
 
         return data
@@ -252,6 +253,16 @@ class TestSliceInfo(QObject, Extension):
                 return node.getName()
 
         return ''
+
+    def getMaterialUsage(self):
+        print_information = self._application.getPrintInformation()
+
+        data = dict()
+        material_used_g = sum(print_information.materialWeights)
+        material_used_mg = round(material_used_g * 1000)
+        data["material_used_mg"] = material_used_mg
+
+        return data
 
     def getFullInfo(self):
         machine_manager = self._application.getMachineManager()
