@@ -1,8 +1,8 @@
 {
-    "name": "Slice info",
-    "author": "Ultimaker B.V.",
-    "version": "1.0.1",
-    "description": "Submits anonymous slice info. Can be disabled through preferences.",
-    "api": "7.2.0",
-    "i18n-catalog": "cura"
+  "name": "3D Print Log",
+  "author": "Hoffman Engineering",
+  "version": "1.0.0",
+  "description": "Send Cura Print details to 3D Print Log",
+  "api": "7.2.0",
+  "i18n-catalog": "cura"
 }

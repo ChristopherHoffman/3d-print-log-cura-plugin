@@ -28,12 +28,14 @@ if TYPE_CHECKING:
 catalog = i18nCatalog("cura")
 
 
-# This Extension runs in the background and sends several bits of information to the Ultimaker servers.
-#       The data is only sent when the user in question gave permission to do so. All data is anonymous and
-#       no model files are being sent (Just a SHA256 hash of the model).
-class TestSliceInfo(QObject, Extension):
-    # info_url = "https://stats.ultimaker.com/api/cura"
+class PrintLogUploader(QObject, Extension):
+    '''This extension lets a user to create a new print on https://3dprintlog.com when saving a print in Cura.
+    3D Print Logs's new print form is pre-populated by Cura's print settings and estimated print time/filament.
+    Requires the user to have an account and be logged into 3D Print Log before they can save any information.
+    '''
+
     plugin_version = "1.0.0"
+    new_print_url = "https://localhost:4200/prints/new/edit"
 
     def __init__(self, parent=None):
         QObject.__init__(self, parent)
@@ -48,72 +50,6 @@ class TestSliceInfo(QObject, Extension):
         self._application.getPreferences().addPreference(
             "3dprintlog_info/asked_send_slice_info", False)
 
-        self._more_info_dialog = None
-        self._send_dialog = None
-        self._example_data_content = None
-
-        self._application.initializationFinished.connect(
-            self._onAppInitialized)
-
-    def _onAppInitialized(self):
-        # DO NOT read any preferences values in the constructor because at the time plugins are created, no version
-        # upgrade has been performed yet because version upgrades are plugins too!
-        if self._more_info_dialog is None:
-            self._more_info_dialog = self._createDialog("MoreInfoWindow.qml")
-
-        # if self._send_dialog is None:
-        #     self._send_dialog = self._createDialog("ModelChecker.qml")
-
-    # Perform action based on user input.
-    #   Note that clicking "Disable" won't actually disable the data sending, but rather take the user to preferences where they can disable it.
-    def messageActionTriggered(self, message_id, action_id):
-        self._application.getPreferences().setValue(
-            "3dprintlog_info/asked_send_slice_info", True)
-        if action_id == "MoreInfo":
-            self.showMoreInfoDialog()
-        self.send_slice_info_message.hide()
-
-    def showMoreInfoDialog(self):
-        if self._more_info_dialog is None:
-            self._more_info_dialog = self._createDialog("MoreInfoWindow.qml")
-        self._more_info_dialog.show()
-
-    # def showSendDialog(self):
-    #     if self._send_dialog is None:
-    #         self._send_dialog = self._createDialog("ModelChecker.qml")
-    #     self._send_dialog.show()
-
-    def _createDialog(self, qml_name):
-        Logger.log("d", "Creating dialog [%s]", qml_name)
-        file_path = os.path.join(PluginRegistry.getInstance(
-        ).getPluginPath(self.getPluginId()), qml_name)
-        dialog = self._application.createQmlComponent(
-            file_path, {"manager": self})
-        return dialog
-
-    @pyqtSlot(result=str)
-    def getExampleData(self) -> Optional[str]:
-        if self._example_data_content is None:
-            plugin_path = PluginRegistry.getInstance().getPluginPath(self.getPluginId())
-            if not plugin_path:
-                Logger.log("e", "Could not get plugin path!",
-                           self.getPluginId())
-                return None
-            file_path = os.path.join(plugin_path, "example_data.html")
-            if file_path:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    self._example_data_content = f.read()
-        return self._example_data_content
-
-    @pyqtSlot(bool)
-    def setSendSliceInfo(self, enabled: bool):
-        self._application.getPreferences().setValue(
-            "3dprintlog_info/send_slice_info", enabled)
-
-    @pyqtSlot(str)
-    def sendTestMessage(self, message: str):
-        Logger.log("i", "Test Message Result [%s]", message)
-
     def _getUserModifiedSettingKeys(self) -> list:
         machine_manager = self._application.getMachineManager()
         global_stack = machine_manager.activeMachine
@@ -127,98 +63,85 @@ class TestSliceInfo(QObject, Extension):
 
         return list(sorted(user_modified_setting_keys))
 
+    def _shouldSendTo3DPrintLog(self) -> bool:
+        '''Returns true if this print should be sent.'''
+        dialog = self._createConfirmationDialog()
+
+        returnValue = dialog.exec()
+
+        return returnValue == QMessageBox.Ok
+
+    def _createConfirmationDialog(self):
+        '''Create a message box prompting the user if they want to send this print information.'''
+        msgBox = QMessageBox()
+        msgBox.setIcon(QMessageBox.Information)
+        msgBox.setText("Would you like to send to 3Dprintlog.com?")
+        msgBox.setWindowTitle("Send to 3D Print Log?")
+        msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        msgBox.setDefaultButton(QMessageBox.Ok)
+
+        self._add3DPrintLogLogo(msgBox)
+
+        return msgBox
+
+    def _add3DPrintLogLogo(self, msgBox):
+        '''Adds the 3D Print Log Logo as a message boxes icon.'''
+        p = QPixmap()
+        plugin_path = PluginRegistry.getInstance().getPluginPath(self.getPluginId())
+        if not plugin_path:
+            Logger.log("e", "Could not get plugin path!",
+                       self.getPluginId())
+            return None
+        file_path = os.path.join(plugin_path, "3DPrintLog_logo_64px.jpg")
+        p.load(file_path)
+        msgBox.setIconPixmap(p)
+
     def _onWriteStarted(self, output_device):
+        '''Send to 3D Print Log when gcode is saved.'''
         try:
-            msgBox = QMessageBox()
-            msgBox.setIcon(QMessageBox.Information)
-            msgBox.setText("Would you like to send to 3Dprintlog.com?")
-            msgBox.setWindowTitle("Send to 3D Print Log?")
-            msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-            msgBox.setDefaultButton(QMessageBox.Ok)
-
-            p = QPixmap()
-            plugin_path = PluginRegistry.getInstance().getPluginPath(self.getPluginId())
-            if not plugin_path:
-                Logger.log("e", "Could not get plugin path!",
-                           self.getPluginId())
-                return None
-            file_path = os.path.join(plugin_path, "3DPrintLog_logo_64px.jpg")
-            p.load(file_path)
-            msgBox.setIconPixmap(p)
-
-            returnValue = msgBox.exec()
-            if returnValue != QMessageBox.Ok:
+            send_to_3D_print_log = self._shouldSendTo3DPrintLog()
+            if not send_to_3D_print_log:
                 Logger.log(
                     "d", "User denied the prompt")
                 return  # Do nothing, user does not want to send data
 
-            if not self._application.getPreferences().getValue("3dprintlog_info/send_slice_info"):
-                Logger.log(
-                    "d", "'3dprintlog_info/send_slice_info' is turned off.")
-                return  # Do nothing, user does not want to send data
-
-            # self.showSendDialog()
-            data = self.getCuraMetadata()
+            data = dict()
+            data.update(self.getCuraMetadata())
             data.update(self.getPrintTime())
             data.update(self.getPrintSettings())
             data.update(self.getMaterialUsage())
             data["print_name"] = self.getPrintName()
 
+            self._sendTo3DPrintLog(data)
+
             # Convert data to bytes
-            test_output = json.dumps(data)
-            binary_data = json.dumps(data).encode("utf-8")
+            # test_output = json.dumps(data)
 
-            with open('C:\Temp\cura_output.json', 'w') as file:
-                file.write(test_output)
-
-            # Print Informationn
-            # print_info_json = json.dumps(print_information)
-            # with open('C:\Temp\cura_print_info.json', 'w') as file:
-            #     file.write(print_info_json)
-
-            # Global Stack Informationn
-            # global_stack_json = json.dumps(global_stack)
-            # with open('C:\Temp\cura_global_stack.json', 'w') as file:
-            #     file.write(global_stack_json)
-
-            import webbrowser
-            try:
-                # python2
-                from urllib import urlencode
-            except ImportError:
-                # python3
-                from urllib.parse import urlencode
-            query_params = urlencode(data)
-            url = "https://localhost:4200/prints/new/edit?" + query_params
-            webbrowser.open(url, new=0, autoraise=True)
-
-            # Send slice info non-blocking
-            # network_manager = self._application.getHttpRequestManager()
-            # network_manager.post(self.info_url, data = binary_data,
-            #                      callback = self._onRequestFinished, error_callback = self._onRequestError)
+            # with open('C:\Temp\cura_output.json', 'w') as file:
+            #     file.write(test_output)
 
         except Exception:
             # We really can't afford to have a mistake here, as this would break the sending of g-code to a device
             # (Either saving or directly to a printer). The functionality of the slice data is not *that* important.
             # But we should be notified about these problems of course.
             Logger.logException(
-                "e", "Exception raised while sending slice info.")
+                "e", "Exception raised while sending print info.")
 
-    def _onRequestFinished(self, reply: "QNetworkReply") -> None:
-        status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
-        if status_code == 200:
-            Logger.log("i", "SliceInfo sent successfully")
-            return
-
-        data = reply.readAll().data().decode("utf-8")
-        Logger.log(
-            "e", "SliceInfo request failed, status code %s, data: %s", status_code, data)
-
-    def _onRequestError(self, reply: "QNetworkReply", error: "QNetworkReply.NetworkError") -> None:
-        Logger.log("e", "Got error for SliceInfo request: %s",
-                   reply.errorString())
+    def _sendTo3DPrintLog(self, data):
+        '''Opens 3D Print Log website and passes the data as query params.'''
+        import webbrowser
+        try:
+            # python2
+            from urllib import urlencode
+        except ImportError:
+            # python3
+            from urllib.parse import urlencode
+        query_params = urlencode(data)
+        url = self.new_print_url + "?" + query_params
+        webbrowser.open(url, new=0, autoraise=True)
 
     def getCuraMetadata(self):
+        '''Returns meta data about cura and the plugin itself.'''
         data = dict()
         data["time_stamp"] = time.time()
         data["cura_version"] = self._application.getVersion()
@@ -228,6 +151,7 @@ class TestSliceInfo(QObject, Extension):
         return data
 
     def getPrintTime(self):
+        '''Returns the estimated print time in seconds.'''
         data = dict()
         print_information = self._application.getPrintInformation()
         data["estimated_print_time_seconds"] = int(
@@ -236,6 +160,7 @@ class TestSliceInfo(QObject, Extension):
         return data
 
     def getPrintSettings(self):
+        '''Returns a dictionary of print settings.'''
         machine_manager = self._application.getMachineManager()
         global_stack = machine_manager.activeMachine
 
@@ -277,6 +202,7 @@ class TestSliceInfo(QObject, Extension):
         return print_settings
 
     def getPrintName(self):
+        '''Returns the name of the Print Object.'''
         for node in DepthFirstIterator(self._application.getController().getScene().getRoot()):
             if node.callDecoration("isSliceable"):
                 return node.getName()
@@ -284,6 +210,7 @@ class TestSliceInfo(QObject, Extension):
         return ''
 
     def getMaterialUsage(self):
+        '''Returns a dictionary containing the material used in milligrams.'''
         print_information = self._application.getPrintInformation()
 
         data = dict()
@@ -479,8 +406,5 @@ class TestSliceInfo(QObject, Extension):
             "print_sequence", "value")
 
         data["print_settings"] = print_settings
-
-        # Send the name of the output device type that is used.
-        # data["output_to"] = type(output_device).__name__
 
         return data
