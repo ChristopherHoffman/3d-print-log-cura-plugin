@@ -1,6 +1,3 @@
-# Copyright (c) 2018 Ultimaker B.V.
-# Cura is released under the terms of the LGPLv3 or higher.
-
 import json
 import os
 import platform
@@ -29,13 +26,14 @@ catalog = i18nCatalog("cura")
 
 
 class PrintLogUploader(QObject, Extension):
-    '''This extension lets a user to create a new print on https://3dprintlog.com when saving a print in Cura.
+    '''This extension lets a user to create a new print on https://www.3dprintlog.com when saving a print in Cura.
     3D Print Logs's new print form is pre-populated by Cura's print settings and estimated print time/filament.
     Requires the user to have an account and be logged into 3D Print Log before they can save any information.
     '''
 
     plugin_version = "1.0.0"
-    new_print_url = "https://localhost:4200/prints/new/edit"
+    #new_print_url = "https://localhost:4200/prints/new/cura"
+    new_print_url = "https://www.3dprintlog.com/prints/new/cura"
 
     def __init__(self, parent=None):
         QObject.__init__(self, parent)
@@ -45,23 +43,37 @@ class PrintLogUploader(QObject, Extension):
         self._application = CuraApplication.getInstance()
 
         self._application.getOutputDeviceManager().writeStarted.connect(self._onWriteStarted)
-        self._application.getPreferences().addPreference(
-            "3dprintlog_info/send_slice_info", True)
-        self._application.getPreferences().addPreference(
-            "3dprintlog_info/asked_send_slice_info", False)
 
-    def _getUserModifiedSettingKeys(self) -> list:
-        machine_manager = self._application.getMachineManager()
-        global_stack = machine_manager.activeMachine
+        self.addMenuItem("Send to 3D Print Log", self._sendTo3DPrintLog)
 
-        user_modified_setting_keys = set()  # type: Set[str]
+    def _onWriteStarted(self, output_device):
+        '''Send to 3D Print Log when gcode is saved.'''
+        try:
+            send_to_3D_print_log = self._shouldSendTo3DPrintLog()
+            if not send_to_3D_print_log:
+                Logger.log(
+                    "d", "User denied the prompt")
+                return  # Do nothing, user does not want to send data
 
-        for stack in [global_stack] + list(global_stack.extruders.values()):
-            # Get all settings in user_changes and quality_changes
-            all_keys = stack.userChanges.getAllKeys() | stack.qualityChanges.getAllKeys()
-            user_modified_setting_keys |= all_keys
+            self._sendTo3DPrintLog()
 
-        return list(sorted(user_modified_setting_keys))
+        except Exception:
+            # We really can't afford to have a mistake here, as this would break the sending of g-code to a device
+            # (Either saving or directly to a printer). The functionality of the slice data is not *that* important.
+            # But we should be notified about these problems of course.
+            Logger.logException(
+                "e", "Exception raised while sending print info.")
+
+    def _sendTo3DPrintLog(self):
+        '''Gets the print settings and send them to 3D Print Log'''
+        data = self._getPrintSettings()
+        self._openBrowser(data)
+
+        # For debugging purposes:
+        # test_output = json.dumps(data)
+
+        # with open('C:\Temp\cura_output.json', 'w') as file:
+        #     file.write(test_output)
 
     def _shouldSendTo3DPrintLog(self) -> bool:
         '''Returns true if this print should be sent.'''
@@ -96,38 +108,18 @@ class PrintLogUploader(QObject, Extension):
         p.load(file_path)
         msgBox.setIconPixmap(p)
 
-    def _onWriteStarted(self, output_device):
-        '''Send to 3D Print Log when gcode is saved.'''
-        try:
-            send_to_3D_print_log = self._shouldSendTo3DPrintLog()
-            if not send_to_3D_print_log:
-                Logger.log(
-                    "d", "User denied the prompt")
-                return  # Do nothing, user does not want to send data
+    def _getPrintSettings(self):
+        '''Returns a dictionary with all of the print settings.'''
+        data = dict()
+        data.update(self.getCuraMetadata())
+        data.update(self.getPrintTime())
+        data.update(self.getPrintSettings())
+        data.update(self.getMaterialUsage())
+        data["print_name"] = self.getPrintName()
 
-            data = dict()
-            data.update(self.getCuraMetadata())
-            data.update(self.getPrintTime())
-            data.update(self.getPrintSettings())
-            data.update(self.getMaterialUsage())
-            data["print_name"] = self.getPrintName()
+        return data
 
-            self._sendTo3DPrintLog(data)
-
-            # Convert data to bytes
-            # test_output = json.dumps(data)
-
-            # with open('C:\Temp\cura_output.json', 'w') as file:
-            #     file.write(test_output)
-
-        except Exception:
-            # We really can't afford to have a mistake here, as this would break the sending of g-code to a device
-            # (Either saving or directly to a printer). The functionality of the slice data is not *that* important.
-            # But we should be notified about these problems of course.
-            Logger.logException(
-                "e", "Exception raised while sending print info.")
-
-    def _sendTo3DPrintLog(self, data):
+    def _openBrowser(self, data):
         '''Opens 3D Print Log website and passes the data as query params.'''
         import webbrowser
         try:
@@ -165,30 +157,20 @@ class PrintLogUploader(QObject, Extension):
         global_stack = machine_manager.activeMachine
 
         print_settings = dict()
+
+        # Quality
         print_settings["layer_height"] = global_stack.getProperty(
             "layer_height", "value")
+        print_settings["top_thickness"] = global_stack.getProperty(
+            "top_thickness", "value")
+        print_settings["bottom_thickness"] = global_stack.getProperty(
+            "bottom_thickness", "value")
 
-        # Support settings
-        print_settings["support_enabled"] = global_stack.getProperty(
-            "support_enable", "value")
-        print_settings["support_extruder_nr"] = int(
-            global_stack.getExtruderPositionValueWithDefault("support_extruder_nr"))
-
-        # Platform adhesion settings
-        print_settings["adhesion_type"] = global_stack.getProperty(
-            "adhesion_type", "value")
-
-        # Shell settings
+        # Shell
         print_settings["wall_line_count"] = global_stack.getProperty(
             "wall_line_count", "value")
-        print_settings["retraction_enable"] = global_stack.getProperty(
-            "retraction_enable", "value")
 
-        # Prime tower settings
-        print_settings["prime_tower_enable"] = global_stack.getProperty(
-            "prime_tower_enable", "value")
-
-        # Infill settings
+        # Infill
         print_settings["infill_sparse_density"] = global_stack.getProperty(
             "infill_sparse_density", "value")
         print_settings["infill_pattern"] = global_stack.getProperty(
@@ -196,8 +178,58 @@ class PrintLogUploader(QObject, Extension):
         print_settings["gradual_infill_steps"] = global_stack.getProperty(
             "gradual_infill_steps", "value")
 
+        # Material
+
+        # Speed
+
+        # Travel
+        print_settings["retraction_enable"] = global_stack.getProperty(
+            "retraction_enable", "value")
+
+        # Cooling
+
+        # Support
+        print_settings["support_enabled"] = global_stack.getProperty(
+            "support_enable", "value")
+        print_settings["support_type"] = global_stack.getProperty(
+            "support_type", "value")
+        print_settings["support_extruder_nr"] = int(
+            global_stack.getExtruderPositionValueWithDefault("support_extruder_nr"))
+
+        # Build Plate Adhesion
+        print_settings["adhesion_type"] = global_stack.getProperty(
+            "adhesion_type", "value")
+
+        # Dual Extrusion
+        print_settings["prime_tower_enable"] = global_stack.getProperty(
+            "prime_tower_enable", "value")
+
+        # Mesh Fixes
+
+        # Special modes
         print_settings["print_sequence"] = global_stack.getProperty(
             "print_sequence", "value")
+        print_settings["mold_enabled"] = global_stack.getProperty(
+            "mold_enabled", "value")
+        print_settings["magic_spiralize"] = global_stack.getProperty(
+            "magic_spiralize", "value")
+        print_settings["ooze_shield_enabled"] = global_stack.getProperty(
+            "ooze_shield_enabled", "value")
+
+        # Experimental
+        print_settings["wireframe_enabled"] = global_stack.getProperty(
+            "wireframe_enabled", "value")
+        print_settings["magic_fuzzy_skin_enabled"] = global_stack.getProperty(
+            "magic_fuzzy_skin_enabled", "value")
+        print_settings["draft_shield_enabled"] = global_stack.getProperty(
+            "draft_shield_enabled", "value")
+        print_settings["adaptive_layer_height_enabled"] = global_stack.getProperty(
+            "adaptive_layer_height_enabled", "value")
+        print_settings["ironing_enabled"] = global_stack.getProperty(
+            "ironing_enabled", "value")
+
+        print_settings["machine_name"] = global_stack.getProperty(
+            "machine_name", "value")
 
         return print_settings
 
@@ -219,6 +251,19 @@ class PrintLogUploader(QObject, Extension):
         data["material_used_mg"] = material_used_mg
 
         return data
+
+    def _getUserModifiedSettingKeys(self) -> list:
+        machine_manager = self._application.getMachineManager()
+        global_stack = machine_manager.activeMachine
+
+        user_modified_setting_keys = set()  # type: Set[str]
+
+        for stack in [global_stack] + list(global_stack.extruders.values()):
+            # Get all settings in user_changes and quality_changes
+            all_keys = stack.userChanges.getAllKeys() | stack.qualityChanges.getAllKeys()
+            user_modified_setting_keys |= all_keys
+
+        return list(sorted(user_modified_setting_keys))
 
     def getFullInfo(self):
         machine_manager = self._application.getMachineManager()
