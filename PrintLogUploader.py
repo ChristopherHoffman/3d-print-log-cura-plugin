@@ -62,18 +62,22 @@ class PrintLogUploader(QObject, Extension):
             # (Either saving or directly to a printer). The functionality of the slice data is not *that* important.
             # But we should be notified about these problems of course.
             Logger.logException(
-                "e", "Exception raised while sending print info.")
+                "e", "Exception raised in _onWriteStarted")
 
     def _sendTo3DPrintLog(self):
         '''Gets the print settings and send them to 3D Print Log'''
-        data = self._getPrintSettings()
-        self._openBrowser(data)
+        try:
+            data = self._getPrintSettings()
+            self._openBrowser(data)
 
-        # For debugging purposes:
-        # test_output = json.dumps(data)
+            # For debugging purposes:
+            # test_output = json.dumps(data)
 
-        # with open('C:\Temp\cura_output.json', 'w') as file:
-        #     file.write(test_output)
+            # with open('C:\Temp\cura_output.json', 'w') as file:
+            #     file.write(test_output)
+        except Exception:
+            Logger.logException(
+                "e", "Exception raised while sending print info in _sendTo3DPrintLog.")
 
     def _shouldSendTo3DPrintLog(self) -> bool:
         '''Returns true if this print should be sent.'''
