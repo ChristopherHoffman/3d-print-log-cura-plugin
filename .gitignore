@@ -1,2 +1,5 @@
 *.qmlc
 __pycache__/
+
+dist/
+releases/
