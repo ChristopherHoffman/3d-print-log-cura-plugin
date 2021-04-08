@@ -4,7 +4,7 @@ import platform
 import time
 from typing import cast, Optional, Set, TYPE_CHECKING
 
-from PyQt5.QtCore import pyqtSlot, QObject
+from PyQt5.QtCore import pyqtSlot, QObject, QUrl
 from PyQt5.QtNetwork import QNetworkRequest
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap
@@ -31,9 +31,10 @@ class PrintLogUploader(QObject, Extension):
     Requires the user to have an account and be logged into 3D Print Log before they can save any information.
     '''
 
-    plugin_version = "1.1.0"
-    #new_print_url = "https://localhost:4200/prints/new/cura"
-    new_print_url = "https://www.3dprintlog.com/prints/new/cura"
+    plugin_version = "1.2.0"
+    new_print_url = "https://localhost:4200/prints/new/cura"
+    api_url = "https://localhost:5001/api/Cura/settings"
+    #new_print_url = "https://www.3dprintlog.com/prints/new/cura"
 
     def __init__(self, parent=None):
         QObject.__init__(self, parent)
@@ -80,8 +81,12 @@ class PrintLogUploader(QObject, Extension):
     def _sendTo3DPrintLog(self):
         '''Gets the print settings and send them to 3D Print Log'''
         try:
-            data = self._getPrintSettings()
-            self._openBrowser(data)
+            data = dict()
+            data["curaVersion"] = self._application.getVersion()
+            data["pluginVersion"] = self.plugin_version
+            data["settings"] = self._getPrintSettings()
+
+            self._sendToApi(data)
 
             # For debugging purposes:
             # test_output = json.dumps(data)
@@ -167,6 +172,49 @@ class PrintLogUploader(QObject, Extension):
         data["print_name"] = self.getPrintName()
 
         return data
+
+    def _sendToApi(self, data):
+        '''Opens 3D Print Log website and passes the data as query params.'''
+        # Convert data to bytes
+        binary_data = json.dumps(data).encode("utf-8")
+
+        Logger.log("i", "data: %s",
+                   binary_data)
+
+        # Send slice info non-blocking
+        network_manager = self._application.getHttpRequestManager()
+
+        # request = QNetworkRequest(QUrl(self.api_url))
+        # request.setHeader(QNetworkRequest.ContentTypeHeader,
+        #                   "application/json")
+
+        network_manager.post(self.api_url, data=binary_data,
+                             callback=self._onRequestFinished, error_callback=self._onRequestError)
+
+    def _onRequestFinished(self, reply: "QNetworkReply") -> None:
+        Logger.log("i", "reply %s",
+                   reply)
+        status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+        if status_code == 200:
+            results = json.loads(reply.readAll().data().decode("utf-8"))
+            newGuid = results["newSettingId"]
+            Logger.log("i", "Settings Send Successfully",
+                       reply.readAll().data().decode("utf-8"), newGuid)
+
+            data = dict()
+            data["cura_version"] = self._application.getVersion()
+            data["plugin_version"] = self.plugin_version
+            data["settingId"] = newGuid
+            self._openBrowser(data)
+            return
+
+        data = reply.readAll().data().decode("utf-8")
+        Logger.log(
+            "e", "Settings Api request failed, status code %s, data: %s", status_code, data)
+
+    def _onRequestError(self, reply: "QNetworkReply", error: "QNetworkReply.NetworkError") -> None:
+        Logger.log("e", "Got error for Send Settings request: %s",
+                   reply.errorString())
 
     def _openBrowser(self, data):
         '''Opens 3D Print Log website and passes the data as query params.'''
