@@ -34,7 +34,7 @@ class PrintLogUploader(QObject, Extension):
     plugin_version = "1.2.0"
     new_print_url = "https://localhost:4200/prints/new/cura"
     api_url = "https://localhost:5001/api/Cura/settings"
-    #new_print_url = "https://www.3dprintlog.com/prints/new/cura"
+    # new_print_url = "https://www.3dprintlog.com/prints/new/cura"
 
     def __init__(self, parent=None):
         QObject.__init__(self, parent)
@@ -169,6 +169,8 @@ class PrintLogUploader(QObject, Extension):
         data.update(self.getPrintSettings())
         data.update(self.getMaterialUsage())
         data.update(self.getExtruderSettings())
+        data["global"] = self.getAllGlobalSettings()
+        data["extruders"] = self.getAllExtruderSettings()
         data["print_name"] = self.getPrintName()
 
         return data
@@ -245,6 +247,68 @@ class PrintLogUploader(QObject, Extension):
         print_information = self._application.getPrintInformation()
         data["estimated_print_time_seconds"] = int(
             print_information.currentPrintTime.getDisplayString(DurationFormat.Format.Seconds))
+
+        return data
+
+    def getAllGlobalSettings(self):
+        machine_manager = self._application.getMachineManager()
+        global_stack = machine_manager.activeMachine
+
+        data = dict()
+
+        # Get all settings in user_changes and quality_changes
+        all_keys = global_stack.getAllKeys()
+
+        for key in all_keys:
+            setting = dict()
+            setting["label"] = global_stack.getProperty(
+                key, "label")
+            setting["description"] = global_stack.getProperty(
+                key, "description")
+            setting["value"] = global_stack.getProperty(key, "value")
+            data[key] = setting
+
+        return data
+
+    def getAllExtruderSettings(self):
+        '''Return the collection of extruder-specific settings as a flattened dictionary.'''
+        data = dict()
+
+        machine_manager = self._application.getMachineManager()
+        global_stack = machine_manager.activeMachine
+
+        extruders = global_stack.extruderList
+        extruders = sorted(
+            extruders, key=lambda extruder: extruder.getMetaDataEntry("position"))
+
+        for extruder in extruders:
+            extruder_position = int(extruder.getMetaDataEntry("position", "0"))
+            extruder_dict = dict()
+
+            # Flatten each extruder setting array by prepending the extruder index as ex#_ to each setting
+            extruderName = "ex" + str(extruder_position) + "_"
+
+            print_information = self._application.getPrintInformation()
+            if len(print_information.materialLengths) > extruder_position:
+                extruder_dict[extruderName +
+                              "material_used"] = print_information.materialLengths[extruder_position]
+
+            all_keys = extruder.getAllKeys()
+
+            for key in all_keys:
+                # extruder_dict[extruderName +
+                #               key] = extruder.getProperty(key, "value")
+
+                setting = dict()
+                setting["label"] = extruder.getProperty(
+                    key, "label")
+                setting["description"] = extruder.getProperty(
+                    key, "description")
+                setting["value"] = extruder.getProperty(key, "value")
+                extruder_dict[extruderName +
+                              key] = setting
+
+            data.update(extruder_dict)
 
         return data
 
