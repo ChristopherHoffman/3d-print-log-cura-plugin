@@ -1,4 +1,7 @@
 from . import PrintLogUploader
+from . import PrintLogSettingDefinitionsModel
+
+from PyQt5.QtQml import qmlRegisterType
 
 
 def getMetaData():
@@ -6,4 +9,7 @@ def getMetaData():
 
 
 def register(app):
+    qmlRegisterType(PrintLogSettingDefinitionsModel.PrintLogSettingDefinitionsModel,
+                    "PrintLogUploader", 1, 0, "PrintLogSettingDefinitionsModel")
+
     return {"extension": PrintLogUploader.PrintLogUploader()}

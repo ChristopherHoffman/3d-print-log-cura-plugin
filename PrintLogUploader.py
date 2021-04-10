@@ -4,11 +4,13 @@ import platform
 import time
 from typing import cast, Optional, Set, TYPE_CHECKING
 
+from PyQt5.QtQml import qmlRegisterType
 from PyQt5.QtCore import pyqtSlot, QObject, QUrl
 from PyQt5.QtNetwork import QNetworkRequest
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap
 
+from cura.CuraApplication import CuraApplication
 from UM.Extension import Extension
 from UM.Scene.Iterator.DepthFirstIterator import DepthFirstIterator
 from UM.i18n import i18nCatalog
@@ -17,6 +19,8 @@ from UM.PluginRegistry import PluginRegistry
 from UM.Qt.Duration import DurationFormat
 
 from cura import ApplicationMetadata
+
+from . import PrintLogSettingsVisibilityHandler
 
 if TYPE_CHECKING:
     from PyQt5.QtNetwork import QNetworkReply
@@ -40,12 +44,30 @@ class PrintLogUploader(QObject, Extension):
         QObject.__init__(self, parent)
         Extension.__init__(self)
 
-        from cura.CuraApplication import CuraApplication
         self._application = CuraApplication.getInstance()
 
         self._application.getOutputDeviceManager().writeStarted.connect(self._onWriteStarted)
 
         self.addMenuItem("Send to 3D Print Log", self._onMenuButtonClicked)
+        self.addMenuItem("Configure Settings to Log", self.showSettingsDialog)
+
+        default_logged_settings = {
+            "default_material_print_temperature",
+            "default_material_bed_temperature",
+            "material_standby_temperature",
+            #"material_flow_temp_graph",
+            "cool_fan_speed",
+            "retraction_amount",
+            "retraction_speed",
+            "material_flow",
+        }
+
+        CuraApplication.getInstance().getPreferences().addPreference(
+            "3d_print_log/logged_settings",
+            ";".join(default_logged_settings)
+        )
+
+        CuraApplication.getInstance().engineCreatedSignal.connect(self._onEngineCreated)
 
     def _onMenuButtonClicked(self):
         '''Executed when the menu button is clicked.'''
@@ -58,6 +80,19 @@ class PrintLogUploader(QObject, Extension):
             return
 
         self._sendTo3DPrintLog()
+
+    def _onEngineCreated(self):
+        qmlRegisterType(
+            PrintLogSettingsVisibilityHandler.PrintLogSettingsVisibilityHandler,
+            "Cura", 1, 0, "PrintLogSettingsVisibilityHandler"
+        )
+
+    def showSettingsDialog(self):
+        path = os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "qml", "SettingsDialog.qml")
+        self._settings_dialog = CuraApplication.getInstance(
+        ).createQmlComponent(path, {"manager": self})
+        self._settings_dialog.show()
 
     def _onWriteStarted(self, output_device):
         '''Send to 3D Print Log when gcode is saved.'''
