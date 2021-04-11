@@ -21,6 +21,7 @@ from UM.Qt.Duration import DurationFormat
 from cura import ApplicationMetadata
 
 from . import PrintLogSettingsVisibilityHandler
+from . import PrintLogSettingDefinitionsModel
 
 if TYPE_CHECKING:
     from PyQt5.QtNetwork import QNetworkReply
@@ -119,7 +120,8 @@ class PrintLogUploader(QObject, Extension):
             data = dict()
             data["curaVersion"] = self._application.getVersion()
             data["pluginVersion"] = self.plugin_version
-            data["settings"] = self._getPrintSettings()
+            # data["settings"] = self._getPrintSettings()
+            data["settings"] = self._generateNotes()
 
             self._sendToApi(data)
 
@@ -132,6 +134,84 @@ class PrintLogUploader(QObject, Extension):
         except Exception:
             Logger.logException(
                 "e", "Exception raised while sending print info in _sendTo3DPrintLog.")
+
+    def _generateNotes(self):
+        data = dict()
+
+        preferences = self._application.getInstance().getPreferences()
+
+        setting_string = preferences.getValue("3d_print_log/logged_settings")
+
+        logged_settings = set(setting_string.split(";"))
+
+        machine_manager = self._application.getMachineManager()
+        global_stack = machine_manager.activeMachine
+
+        # for key in logged_settings:
+        #     setting = dict()
+        #     setting["label"] = global_stack.getProperty(
+        #         key, "label")
+        #     setting["description"] = global_stack.getProperty(
+        #         key, "description")
+        #     setting["value"] = global_stack.getProperty(key, "value")
+        #     data[key] = setting
+
+        settingDef = PrintLogSettingDefinitionsModel.PrintLogSettingDefinitionsModel()
+        Logger.log("i", "Test %s", dir(
+            settingDef))
+
+        settingDef.id = "test"
+        settingDef.containerId = global_stack.definition.id
+        Logger.log("i", "Container ID %s", settingDef.containerId)
+        settingDef.visibilityHandler = PrintLogSettingsVisibilityHandler.PrintLogSettingsVisibilityHandler()
+        settingDef.showAll = True
+        settingDef.showAncestors = True
+        settingDef.expanded = ["*"]
+        settingDef.exclude = ["machine_settings", "command_line_settings"]
+
+        settingDef.forceUpdate()
+        settingDef._updateVisibleRows()
+
+        Logger.log("i", "Count %s", settingDef.count)
+        Logger.log("i", "Visible %s", settingDef.visibleCount)
+        Logger.log("i", "Categories %s", settingDef.categoryCount)
+
+        categoryData = dict()
+        currentCategory = None
+        for index in range(settingDef.rowCount()):
+            modelIndex = settingDef.createIndex(index, 0)
+            item = settingDef.data(modelIndex, settingDef.KeyRole)
+            Logger.log("i", "item %s", item)
+
+            # itemType = settingDef.data(modelIndex, "type")
+            # Logger.log("i", "item Type %s, %s", itemType.key, itemType.value)
+
+            # setting = dict()
+            # setting["label"] = global_stack.getProperty(
+            #     item, "label")
+            # setting["description"] = global_stack.getProperty(
+            #     item, "description")
+            # setting["value"] = global_stack.getProperty(item, "value")
+            # data[item] = setting
+
+            # Loop through each setting.
+            # if "type" is "category" then start a new dict.
+            type = global_stack.getProperty(item, "type")
+            if type.lower() == "category":
+                if currentCategory is not None:
+                    # If we have been adding to a current Category, save it and make a new dictionary
+                    data[currentCategory] = categoryData
+                    categoryData = dict()
+
+                currentCategory = global_stack.getProperty(item, "label")
+
+                continue
+
+            label = global_stack.getProperty(item, "label")
+            value = global_stack.getProperty(item, "value")
+            categoryData[label] = value
+
+        return data
 
     def _shouldSendTo3DPrintLog(self) -> bool:
         '''Returns true if this print should be sent.'''

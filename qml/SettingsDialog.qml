@@ -8,7 +8,7 @@ import QtQuick.Window 2.2
 
 import UM 1.2 as UM
 import Cura 1.0 as Cura
-import MaterialSettingsPlugin 1.0 as MaterialSettingsPlugin
+import PrintLogUploader 1.0 as PrintLogUploader
 
 UM.Dialog {
     id: settingsDialog
