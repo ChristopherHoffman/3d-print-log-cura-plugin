@@ -176,12 +176,16 @@ class PrintLogUploader(QObject, Extension):
         Logger.log("i", "Visible %s", settingDef.visibleCount)
         Logger.log("i", "Categories %s", settingDef.categoryCount)
 
+        notes = ''
+
         categoryData = dict()
+        categoryString = ''
         currentCategory = None
         for index in range(settingDef.rowCount()):
             modelIndex = settingDef.createIndex(index, 0)
             item = settingDef.data(modelIndex, settingDef.KeyRole)
-            Logger.log("i", "item %s", item)
+            itemDepth = settingDef.data(modelIndex, settingDef.DepthRole)
+            Logger.log("i", "item %s, depth %s", item, itemDepth)
 
             # itemType = settingDef.data(modelIndex, "type")
             # Logger.log("i", "item Type %s, %s", itemType.key, itemType.value)
@@ -200,17 +204,32 @@ class PrintLogUploader(QObject, Extension):
             if type.lower() == "category":
                 if currentCategory is not None:
                     # If we have been adding to a current Category, save it and make a new dictionary
-                    data[currentCategory] = categoryData
+                    if (len(categoryData) > 0):
+                        data[currentCategory] = categoryData
+
+                        notes = notes + categoryString
                     categoryData = dict()
 
                 currentCategory = global_stack.getProperty(item, "label")
+                categoryString = currentCategory + "\n"
 
                 continue
 
-            label = global_stack.getProperty(item, "label")
-            value = global_stack.getProperty(item, "value")
-            categoryData[label] = value
+            if (item in logged_settings):
+                label = global_stack.getProperty(item, "label")
+                value = global_stack.getProperty(item, "value")
+                unit = global_stack.getProperty(item, "unit")
+                categoryData[label] = value
 
+                categoryString = categoryString + "  " + \
+                    str(label) + ": " + str(value)
+
+                if unit is not None:
+                    categoryString = categoryString + " " + str(unit)
+
+                categoryString = categoryString + "\n"
+
+        Logger.log("i", "Final Notes: %s", notes)
         return data
 
     def _shouldSendTo3DPrintLog(self) -> bool:
