@@ -181,6 +181,20 @@ UM.Dialog {
 
     rightButtons: [
         Button {
+            text: catalog.i18nc("@action:button", "Reset To Defaults");
+            onClicked: {
+                UM.Preferences.resetPreference("3d_print_log/logged_settings")
+                
+                UM.Preferences.resetPreference("3d_print_log/include_profile_name")
+                includeProfileNameCheckbox.checked = UM.Preferences.getValue("3d_print_log/include_profile_name")
+
+                UM.Preferences.resetPreference("3d_print_log/include_filament_name")
+                includeFilamentNameCheckbox.checked = UM.Preferences.getValue("3d_print_log/include_filament_name")
+                
+                settingsDialog.visible = false;
+            }
+        },
+        Button {
             text: catalog.i18nc("@action:button", "Close");
             onClicked: {
                 settingsDialog.visible = false;

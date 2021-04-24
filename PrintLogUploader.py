@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap
 
 from cura.CuraApplication import CuraApplication
+from cura.Machines.ContainerTree import ContainerTree
 from UM.Extension import Extension
 from UM.Scene.Iterator.DepthFirstIterator import DepthFirstIterator
 from UM.i18n import i18nCatalog
@@ -42,6 +43,25 @@ class PrintLogUploader(QObject, Extension):
     api_url = "https://localhost:5001/api/Cura/settings"
     # new_print_url = "https://www.3dprintlog.com/prints/new/cura"
 
+    default_logged_settings = {
+        "layer_height",
+        "line_width",
+        "wall_line_count",
+        "top_thickness",
+        "bottom_thickness",
+        "infill_sparse_density",
+        "infill_pattern",
+        "material_print_temperature",
+        "material_bed_temperature",
+        "speed_print",
+        "cool_fan_enabled",
+        "cool_fan_speed",
+        "support_enable",
+        "support_structure",
+        "support_type",
+        "adhesion_type",
+    }
+
     def __init__(self, parent=None):
         QObject.__init__(self, parent)
         Extension.__init__(self)
@@ -53,20 +73,9 @@ class PrintLogUploader(QObject, Extension):
         self.addMenuItem("Send to 3D Print Log", self._onMenuButtonClicked)
         self.addMenuItem("Configure Settings to Log", self.showSettingsDialog)
 
-        default_logged_settings = {
-            "default_material_print_temperature",
-            "default_material_bed_temperature",
-            "material_standby_temperature",
-            #"material_flow_temp_graph",
-            "cool_fan_speed",
-            "retraction_amount",
-            "retraction_speed",
-            "material_flow",
-        }
-
         CuraApplication.getInstance().getPreferences().addPreference(
             "3d_print_log/logged_settings",
-            ";".join(default_logged_settings)
+            ";".join(self.default_logged_settings)
         )
         CuraApplication.getInstance().getPreferences().addPreference(
             "3d_print_log/include_profile_name",
@@ -74,10 +83,19 @@ class PrintLogUploader(QObject, Extension):
         )
         CuraApplication.getInstance().getPreferences().addPreference(
             "3d_print_log/include_filament_name",
-            False
+            True
         )
 
         CuraApplication.getInstance().engineCreatedSignal.connect(self._onEngineCreated)
+
+    def _resetPreferencesToDefault(self):
+
+        CuraApplication.getInstance().getPreferences().resetPreference(
+            "3d_print_log/logged_settings")
+        CuraApplication.getInstance().getPreferences().resetPreference(
+            "3d_print_log/include_profile_name")
+        CuraApplication.getInstance().getPreferences().resetPreference(
+            "3d_print_log/include_filament_name")
 
     def _onMenuButtonClicked(self):
         '''Executed when the menu button is clicked.'''
@@ -130,7 +148,15 @@ class PrintLogUploader(QObject, Extension):
             data["curaVersion"] = self._application.getVersion()
             data["pluginVersion"] = self.plugin_version
             # data["settings"] = self._getPrintSettings()
-            data["settings"] = self._generateNotes()
+
+            settings = dict()
+            settings["note"] = self._generateNotes()
+            settings["print_name"] = self.getPrintName()
+            settings.update(self.getCuraMetadata())
+            settings.update(self.getPrintTime())
+            settings.update(self.getMaterialUsage())
+
+            data["settings"] = settings
 
             self._sendToApi(data)
 
@@ -187,6 +213,43 @@ class PrintLogUploader(QObject, Extension):
 
         notes = ''
 
+        # Append Profile Name if requested
+        include_profile_setting = preferences.getValue(
+            "3d_print_log/include_profile_name")
+        if (include_profile_setting):
+
+            notes = notes + "Profile: " + \
+                self._application.getMachineManager().activeQualityOrQualityChangesName + "\n\n"
+
+        # Append Filament Name if requested
+        include_filament_name = preferences.getValue(
+            "3d_print_log/include_filament_name")
+        if (include_filament_name):
+
+            extruders = global_stack.extruderList
+            extruders = sorted(
+                extruders, key=lambda extruder: extruder.getMetaDataEntry("position"))
+
+            materials = []
+            for extruder in extruders:
+                extruder_position = int(
+                    extruder.getMetaDataEntry("position", "0"))
+
+                print_information = self._application.getPrintInformation()
+                if len(print_information.materialLengths) > extruder_position:
+                    materialUsed = print_information.materialLengths[extruder_position]
+
+                    if (materialUsed is None or not (materialUsed > 0)):
+                        continue
+
+                    materials.append(extruder.material.getMetaData().get(
+                        "brand", "") + " " + extruder.material.getMetaData().get("name", ""))
+
+            if (len(materials) > 0):
+                notes = notes + "Filament: " + ", ".join(materials) + "\n\n"
+
+        notes = notes + "Settings:\n"
+
         categoryData = dict()
         categoryString = ''
         currentCategory = None
@@ -234,8 +297,7 @@ class PrintLogUploader(QObject, Extension):
         if (len(categoryData) > 0):
             notes = notes + categoryString
 
-        Logger.log("i", "Final Notes: %s", notes)
-        return data
+        return notes
 
     def _buildSettingRow(self, setting_name) -> str:
         machine_manager = self._application.getMachineManager()
@@ -380,7 +442,6 @@ class PrintLogUploader(QObject, Extension):
         data.update(self.getExtruderSettings())
         data["global"] = self.getAllGlobalSettings()
         data["extruders"] = self.getAllExtruderSettings()
-        data["print_name"] = self.getPrintName()
 
         return data
 
