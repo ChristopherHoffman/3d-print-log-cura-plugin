@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+- Added Settings Dialog to allow for customizing of what settings are logged.
+- Added option to record Profile Name and Filament Names
+
 ## 1.1.0
 
 - Added support for multiple extruders

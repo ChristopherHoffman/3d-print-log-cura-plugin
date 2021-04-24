@@ -2,13 +2,17 @@ import json
 import os
 import platform
 import time
+import collections
 from typing import cast, Optional, Set, TYPE_CHECKING
 
-from PyQt5.QtCore import pyqtSlot, QObject
+from PyQt5.QtQml import qmlRegisterType
+from PyQt5.QtCore import pyqtSlot, QObject, QUrl
 from PyQt5.QtNetwork import QNetworkRequest
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap
 
+from cura.CuraApplication import CuraApplication
+from cura.Machines.ContainerTree import ContainerTree
 from UM.Extension import Extension
 from UM.Scene.Iterator.DepthFirstIterator import DepthFirstIterator
 from UM.i18n import i18nCatalog
@@ -17,6 +21,9 @@ from UM.PluginRegistry import PluginRegistry
 from UM.Qt.Duration import DurationFormat
 
 from cura import ApplicationMetadata
+
+from . import PrintLogSettingsVisibilityHandler
+from . import PrintLogSettingDefinitionsModel
 
 if TYPE_CHECKING:
     from PyQt5.QtNetwork import QNetworkReply
@@ -31,22 +38,59 @@ class PrintLogUploader(QObject, Extension):
     Requires the user to have an account and be logged into 3D Print Log before they can save any information.
     '''
 
-    plugin_version = "1.1.0"
-    #new_print_url = "https://localhost:4200/prints/new/cura"
+    plugin_version = "1.2.0"
+    # new_print_url = "https://localhost:4200/prints/new/cura"
+    # api_url = "https://localhost:5001/api/Cura/settings"
+
     new_print_url = "https://www.3dprintlog.com/prints/new/cura"
+    api_url = "https://api.3dprintlog.com/api/Cura/settings"
+
+    default_logged_settings = {
+        "layer_height",
+        "line_width",
+        "wall_line_count",
+        "top_thickness",
+        "bottom_thickness",
+        "infill_sparse_density",
+        "infill_pattern",
+        "material_print_temperature",
+        "material_bed_temperature",
+        "speed_print",
+        "cool_fan_enabled",
+        "cool_fan_speed",
+        "support_enable",
+        "support_structure",
+        "support_type",
+        "adhesion_type",
+    }
 
     def __init__(self, parent=None):
         QObject.__init__(self, parent)
         Extension.__init__(self)
 
-        from cura.CuraApplication import CuraApplication
         self._application = CuraApplication.getInstance()
 
         self._application.getOutputDeviceManager().writeStarted.connect(self._onWriteStarted)
 
-        self.addMenuItem("Send to 3D Print Log", self._onMenuButtonClicked)
+        self.addMenuItem("Send to 3D Print Log", self._onSendMenuButtonClicked)
+        self.addMenuItem("Configure Settings to Log", self.showSettingsDialog)
 
-    def _onMenuButtonClicked(self):
+        self._application.getPreferences().addPreference(
+            "3d_print_log/logged_settings",
+            ";".join(self.default_logged_settings)
+        )
+        self._application.getPreferences().addPreference(
+            "3d_print_log/include_profile_name",
+            True
+        )
+        self._application.getPreferences().addPreference(
+            "3d_print_log/include_filament_name",
+            True
+        )
+
+        self._application.engineCreatedSignal.connect(self._onEngineCreated)
+
+    def _onSendMenuButtonClicked(self):
         '''Executed when the menu button is clicked.'''
         send_to_3D_print_log = self._hasSlicedModel()
         if not send_to_3D_print_log:
@@ -57,6 +101,19 @@ class PrintLogUploader(QObject, Extension):
             return
 
         self._sendTo3DPrintLog()
+
+    def _onEngineCreated(self):
+        qmlRegisterType(
+            PrintLogSettingsVisibilityHandler.PrintLogSettingsVisibilityHandler,
+            "Cura", 1, 0, "PrintLogSettingsVisibilityHandler"
+        )
+
+    def showSettingsDialog(self):
+        path = os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "qml", "SettingsDialog.qml")
+        self._settings_dialog = CuraApplication.getInstance(
+        ).createQmlComponent(path, {"manager": self})
+        self._settings_dialog.show()
 
     def _onWriteStarted(self, output_device):
         '''Send to 3D Print Log when gcode is saved.'''
@@ -80,8 +137,20 @@ class PrintLogUploader(QObject, Extension):
     def _sendTo3DPrintLog(self):
         '''Gets the print settings and send them to 3D Print Log'''
         try:
-            data = self._getPrintSettings()
-            self._openBrowser(data)
+            data = dict()
+            data["curaVersion"] = self._application.getVersion()
+            data["pluginVersion"] = self.plugin_version
+
+            settings = dict()
+            settings["note"] = self._generateNotes()
+            settings["print_name"] = self._getPrintName()
+            settings.update(self._getCuraMetadata())
+            settings.update(self._getPrintTime())
+            settings.update(self._getMaterialUsage())
+
+            data["settings"] = settings
+
+            self._sendToApi(data)
 
             # For debugging purposes:
             # test_output = json.dumps(data)
@@ -156,17 +225,41 @@ class PrintLogUploader(QObject, Extension):
         p.load(file_path)
         msgBox.setIconPixmap(p)
 
-    def _getPrintSettings(self):
-        '''Returns a dictionary with all of the print settings.'''
-        data = dict()
-        data.update(self.getCuraMetadata())
-        data.update(self.getPrintTime())
-        data.update(self.getPrintSettings())
-        data.update(self.getMaterialUsage())
-        data.update(self.getExtruderSettings())
-        data["print_name"] = self.getPrintName()
+    def _sendToApi(self, data):
+        '''Sends the data to the 3D Print Log api.'''
+        # Convert setting data to bytes
+        binary_data = json.dumps(data).encode("utf-8")
 
-        return data
+        # Sent
+        network_manager = self._application.getHttpRequestManager()
+        network_manager.post(self.api_url, data=binary_data,
+                             callback=self._onRequestFinished, error_callback=self._onRequestError)
+
+    def _onRequestFinished(self, reply: "QNetworkReply") -> None:
+        '''Handle the response from the API after sending the settings.'''
+        status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+        if status_code == 200:
+            # API will return a GUID that can be used to retrieve the setting information that was saved.
+            results = json.loads(reply.readAll().data().decode("utf-8"))
+            newGuid = results["newSettingId"]
+
+            # Use that GUID and some cura metadata to open 3D Print Log website in a browser.
+            # The website use the GUID to retrieve the setting information and populate the print.
+            data = dict()
+            data["cura_version"] = self._application.getVersion()
+            data["plugin_version"] = self.plugin_version
+            data["settingId"] = newGuid
+            self._openBrowser(data)
+            return
+
+        # If the response was non-successful, then log the error.
+        data = reply.readAll().data().decode("utf-8")
+        Logger.log(
+            "e", "Settings Api request failed, status code %s, data: %s", status_code, data)
+
+    def _onRequestError(self, reply: "QNetworkReply", error: "QNetworkReply.NetworkError") -> None:
+        Logger.log("e", "Got error for Send Settings request: %s",
+                   reply.errorString())
 
     def _openBrowser(self, data):
         '''Opens 3D Print Log website and passes the data as query params.'''
@@ -181,7 +274,7 @@ class PrintLogUploader(QObject, Extension):
         url = self.new_print_url + "?" + query_params
         webbrowser.open(url, new=0, autoraise=True)
 
-    def getCuraMetadata(self):
+    def _getCuraMetadata(self):
         '''Returns meta data about cura and the plugin itself.'''
         data = dict()
         data["time_stamp"] = time.time()
@@ -191,7 +284,7 @@ class PrintLogUploader(QObject, Extension):
 
         return data
 
-    def getPrintTime(self):
+    def _getPrintTime(self):
         '''Returns the estimated print time in seconds.'''
         data = dict()
         print_information = self._application.getPrintInformation()
@@ -200,144 +293,7 @@ class PrintLogUploader(QObject, Extension):
 
         return data
 
-    def getPrintSettings(self):
-        '''Returns a dictionary of print settings.'''
-        machine_manager = self._application.getMachineManager()
-        global_stack = machine_manager.activeMachine
-
-        print_settings = dict()
-
-        # Quality
-        print_settings["layer_height"] = global_stack.getProperty(
-            "layer_height", "value")
-        print_settings["top_thickness"] = global_stack.getProperty(
-            "top_thickness", "value")
-        print_settings["bottom_thickness"] = global_stack.getProperty(
-            "bottom_thickness", "value")
-
-        # Shell
-        print_settings["wall_line_count"] = global_stack.getProperty(
-            "wall_line_count", "value")
-
-        # Infill
-        print_settings["infill_sparse_density"] = global_stack.getProperty(
-            "infill_sparse_density", "value")
-        print_settings["infill_pattern"] = global_stack.getProperty(
-            "infill_pattern", "value")
-        print_settings["gradual_infill_steps"] = global_stack.getProperty(
-            "gradual_infill_steps", "value")
-
-        # Material
-
-        # Speed
-
-        # Travel
-        print_settings["retraction_enable"] = global_stack.getProperty(
-            "retraction_enable", "value")
-
-        # Cooling
-
-        # Support
-        print_settings["support_enabled"] = global_stack.getProperty(
-            "support_enable", "value")
-        print_settings["support_type"] = global_stack.getProperty(
-            "support_type", "value")
-        print_settings["support_extruder_nr"] = int(
-            global_stack.getExtruderPositionValueWithDefault("support_extruder_nr"))
-
-        # Build Plate Adhesion
-        print_settings["adhesion_type"] = global_stack.getProperty(
-            "adhesion_type", "value")
-
-        # Dual Extrusion
-        print_settings["prime_tower_enable"] = global_stack.getProperty(
-            "prime_tower_enable", "value")
-
-        # Mesh Fixes
-
-        # Special modes
-        print_settings["print_sequence"] = global_stack.getProperty(
-            "print_sequence", "value")
-        print_settings["mold_enabled"] = global_stack.getProperty(
-            "mold_enabled", "value")
-        print_settings["magic_spiralize"] = global_stack.getProperty(
-            "magic_spiralize", "value")
-        print_settings["ooze_shield_enabled"] = global_stack.getProperty(
-            "ooze_shield_enabled", "value")
-
-        # Experimental
-        print_settings["wireframe_enabled"] = global_stack.getProperty(
-            "wireframe_enabled", "value")
-        print_settings["magic_fuzzy_skin_enabled"] = global_stack.getProperty(
-            "magic_fuzzy_skin_enabled", "value")
-        print_settings["draft_shield_enabled"] = global_stack.getProperty(
-            "draft_shield_enabled", "value")
-        print_settings["adaptive_layer_height_enabled"] = global_stack.getProperty(
-            "adaptive_layer_height_enabled", "value")
-        print_settings["ironing_enabled"] = global_stack.getProperty(
-            "ironing_enabled", "value")
-
-        print_settings["machine_name"] = global_stack.getProperty(
-            "machine_name", "value")
-
-        return print_settings
-
-    def getExtruderSettings(self):
-        '''Return the collection of extruder-specific settings as a flattened dictionary.'''
-        data = dict()
-
-        machine_manager = self._application.getMachineManager()
-        global_stack = machine_manager.activeMachine
-
-        extruders = global_stack.extruderList
-        extruders = sorted(
-            extruders, key=lambda extruder: extruder.getMetaDataEntry("position"))
-
-        for extruder in extruders:
-            extruder_position = int(extruder.getMetaDataEntry("position", "0"))
-            extruder_dict = dict()
-
-            # Flatten each extruder setting array by prepending the extruder index as ex#_ to each setting
-            extruderName = "ex" + str(extruder_position) + "_"
-
-            print_information = self._application.getPrintInformation()
-            if len(print_information.materialLengths) > extruder_position:
-                extruder_dict[extruderName +
-                              "material_used"] = print_information.materialLengths[extruder_position]
-
-            extruder_dict[extruderName +
-                          "variant"] = extruder.variant.getName()
-            extruder_dict[extruderName + "nozzle_size"] = extruder.getProperty(
-                "machine_nozzle_size", "value")
-
-            extruder_dict[extruderName + "wall_line_count"] = extruder.getProperty(
-                "wall_line_count", "value")
-            extruder_dict[extruderName + "top_thickness"] = extruder.getProperty(
-                "top_thickness", "value")
-            extruder_dict[extruderName + "top_layers"] = extruder.getProperty(
-                "top_layers", "value")
-            extruder_dict[extruderName + "bottom_thickness"] = extruder.getProperty(
-                "bottom_thickness", "value")
-            extruder_dict[extruderName + "bottom_layers"] = extruder.getProperty(
-                "bottom_layers", "value")
-            extruder_dict[extruderName + "retraction_enable"] = extruder.getProperty(
-                "retraction_enable", "value")
-            extruder_dict[extruderName + "infill_sparse_density"] = extruder.getProperty(
-                "infill_sparse_density", "value")
-            extruder_dict[extruderName + "infill_pattern"] = extruder.getProperty(
-                "infill_pattern", "value")
-            extruder_dict[extruderName + "gradual_infill_steps"] = extruder.getProperty(
-                "gradual_infill_steps", "value")
-            extruder_dict[extruderName + "default_material_print_temperature"] = extruder.getProperty(
-                "default_material_print_temperature", "value")
-            extruder_dict[extruderName + "material_print_temperature"] = extruder.getProperty(
-                "material_print_temperature", "value")
-
-            data.update(extruder_dict)
-
-        return data
-
-    def getPrintName(self):
+    def _getPrintName(self):
         '''Returns the name of the Print Object.'''
         for node in DepthFirstIterator(self._application.getController().getScene().getRoot()):
             if node.callDecoration("isSliceable"):
@@ -345,7 +301,7 @@ class PrintLogUploader(QObject, Extension):
 
         return ''
 
-    def getMaterialUsage(self):
+    def _getMaterialUsage(self):
         '''Returns a dictionary containing the material used in milligrams.'''
         print_information = self._application.getPrintInformation()
 
@@ -355,3 +311,167 @@ class PrintLogUploader(QObject, Extension):
         data["material_used_mg"] = material_used_mg
 
         return data
+
+    def _generateNotes(self):
+        data = dict()
+
+        preferences = self._application.getInstance().getPreferences()
+        setting_string = preferences.getValue("3d_print_log/logged_settings")
+        logged_settings = set(setting_string.split(";"))
+
+        machine_manager = self._application.getMachineManager()
+        global_stack = machine_manager.activeMachine
+
+        notes = ''
+
+        # Add Profile Name to notes if the user has it selected.
+        include_profile_setting = preferences.getValue(
+            "3d_print_log/include_profile_name")
+        if (include_profile_setting):
+            notes = notes + "Profile: " + \
+                self._application.getMachineManager().activeQualityOrQualityChangesName + "\n\n"
+
+        # Add Filament Names to notes if the user has it selected.
+        include_filament_name = preferences.getValue(
+            "3d_print_log/include_filament_name")
+        if (include_filament_name):
+
+            extruders = global_stack.extruderList
+            extruders = sorted(
+                extruders, key=lambda extruder: extruder.getMetaDataEntry("position"))
+
+            materials = []
+            # Loop through each extruder and get the filament name if that extruder is used.
+            for extruder in extruders:
+                extruder_position = int(
+                    extruder.getMetaDataEntry("position", "0"))
+
+                print_information = self._application.getPrintInformation()
+                if len(print_information.materialLengths) > extruder_position:
+                    materialUsed = print_information.materialLengths[extruder_position]
+
+                    if (materialUsed is None or not (materialUsed > 0)):
+                        continue
+
+                    materials.append(extruder.material.getMetaData().get(
+                        "brand", "") + " " + extruder.material.getMetaData().get("name", ""))
+
+            if (len(materials) > 0):
+                notes = notes + "Filament: " + ", ".join(materials) + "\n\n"
+
+        # Add settings to the notes.
+        notes = notes + "Settings:\n"
+
+        # Grab an instance of our SettingDefinitions so we can loop over the settings while preserving their order
+        settingDef = PrintLogSettingDefinitionsModel.PrintLogSettingDefinitionsModel()
+
+        settingDef.id = "test"
+        settingDef.containerId = global_stack.definition.id
+        Logger.log("i", "Container ID %s", settingDef.containerId)
+        settingDef.visibilityHandler = PrintLogSettingsVisibilityHandler.PrintLogSettingsVisibilityHandler()
+        settingDef.showAll = True
+        settingDef.showAncestors = True
+        settingDef.expanded = ["*"]
+        settingDef.exclude = ["machine_settings", "command_line_settings"]
+
+        settingDef.forceUpdate()
+        settingDef._updateVisibleRows()
+
+        categoryData = dict()
+        categoryString = ''
+        currentCategory = None
+        # Loop through the PrintLogSettingDefinitionsModel's rows
+        for index in range(settingDef.rowCount()):
+            modelIndex = settingDef.createIndex(index, 0)
+            item = settingDef.data(modelIndex, settingDef.KeyRole)
+
+            # if "type" is "category" then start a new dict.
+            type = global_stack.getProperty(item, "type")
+            if type.lower() == "category":
+                if currentCategory is not None:
+                    # If we have been adding to a current Category, save it and make a new dictionary
+                    if (len(categoryData) > 0):
+                        data[currentCategory] = categoryData
+
+                        notes = notes + categoryString
+                    categoryData = dict()
+
+                currentCategory = global_stack.getProperty(item, "label")
+                categoryString = currentCategory + "\n"
+
+                continue
+
+            # If the setting name is in our list of logged settings, then add it to the note.
+            if (item in logged_settings):
+                settingNote = self._buildSettingRow(item)
+                categoryData[item] = settingNote
+                categoryString = categoryString + "  " + settingNote + "\n"
+
+        # Add the last category if any data exists for it:
+        if (len(categoryData) > 0):
+            notes = notes + categoryString
+
+        return notes
+
+    def _buildSettingRow(self, setting_name) -> str:
+        '''Builds the string representation of a single setting, 
+        taking into account if the setting is different between extruders.'''
+
+        machine_manager = self._application.getMachineManager()
+        global_stack = machine_manager.activeMachine
+
+        # Get List of all extruders that used filament
+        extruders = global_stack.extruderList
+        extruders = sorted(
+            extruders, key=lambda extruder: extruder.getMetaDataEntry("position"))
+
+        # Get values for this setting for all extruders
+        settingValues = collections.OrderedDict()
+        for extruder in extruders:
+            extruder_position = int(
+                extruder.getMetaDataEntry("position", "0"))
+
+            print_information = self._application.getPrintInformation()
+            if len(print_information.materialLengths) > extruder_position:
+                materialUsed = print_information.materialLengths[extruder_position]
+
+                if (materialUsed is None or not (materialUsed > 0)):
+                    continue
+
+                value = extruder.getProperty(setting_name, "value")
+                unit = extruder.getProperty(setting_name, "unit")
+
+                result = str(value)
+
+                if unit and not str(unit).isspace():
+                    if (str(unit) in ["°C", "°F", "%"]):
+                        result = result + str(unit)
+                    else:
+                        result = result + " " + str(unit)
+
+                settingValues["Ex " + str(extruder_position + 1)] = result
+
+        # If the values are all the same, just use the setting and format as:
+        # Layer Height: 0.5mm
+        areAllValuesTheSame = len(list(set(list(settingValues.values())))) == 1
+        if (areAllValuesTheSame):
+            label = global_stack.getProperty(setting_name, "label")
+            value = list(settingValues.values())[0]
+
+            return str(label) + ": " + str(value)
+
+        # If the values are different, then combine them like:
+        # Layer Height: 0.5 mm (Ex 1), 0.8mm (Ex 2)
+        label = global_stack.getProperty(setting_name, "label")
+        result = str(label) + ": "
+        isFirst = True
+        for setting in settingValues:
+            if (not isFirst):
+                result = result + ", "
+
+            result = result + \
+                settingValues[setting] + " (" + str(setting) + ")"
+
+            isFirst = False
+
+        return result
