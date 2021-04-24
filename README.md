@@ -18,6 +18,10 @@ Once installed, a prompt will be displayed asking if you would like to send the 
 
 This will only prepopulate the form, no information is saved until you save the form in 3D Print Log.
 
+## Settings
+
+What settings that are logged can be modified through the `Extensions -> 3D Print Log -> Configure Settings to Log` menu option. Here you can select what settings will be sent to 3D Print Log.
+
 ## Contributing
 
 Want to contribute? Feel free to create issues and pull requests! Or leave feedback directly at [3D Print Log's Feedback](https://www.3dprintlog.com/feedback). Let me know what features you would like to see.

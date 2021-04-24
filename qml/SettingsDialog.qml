@@ -1,6 +1,3 @@
-// Copyright (c) 2019 fieldOfView
-// The MaterialSettingsPlugin is released under the terms of the AGPLv3 or higher.
-
 import QtQuick 2.2
 import QtQuick.Controls 1.2
 import QtQuick.Controls.Styles 1.2
@@ -178,9 +175,12 @@ UM.Dialog {
         }
     }
     
-
     rightButtons: [
         Button {
+            anchors {
+                rightMargin: UM.Theme.getSize("default_margin").width
+            }
+            
             text: catalog.i18nc("@action:button", "Reset To Defaults");
             onClicked: {
                 UM.Preferences.resetPreference("3d_print_log/logged_settings")
@@ -193,6 +193,12 @@ UM.Dialog {
                 
                 settingsDialog.visible = false;
             }
+        },
+        Item
+        {
+            //: Spacer
+            height: UM.Theme.getSize("default_margin").height
+            width: UM.Theme.getSize("default_margin").width
         },
         Button {
             text: catalog.i18nc("@action:button", "Close");

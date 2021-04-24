@@ -70,34 +70,25 @@ class PrintLogUploader(QObject, Extension):
 
         self._application.getOutputDeviceManager().writeStarted.connect(self._onWriteStarted)
 
-        self.addMenuItem("Send to 3D Print Log", self._onMenuButtonClicked)
+        self.addMenuItem("Send to 3D Print Log", self._onSendMenuButtonClicked)
         self.addMenuItem("Configure Settings to Log", self.showSettingsDialog)
 
-        CuraApplication.getInstance().getPreferences().addPreference(
+        self._application.getPreferences().addPreference(
             "3d_print_log/logged_settings",
             ";".join(self.default_logged_settings)
         )
-        CuraApplication.getInstance().getPreferences().addPreference(
+        self._application.getPreferences().addPreference(
             "3d_print_log/include_profile_name",
             True
         )
-        CuraApplication.getInstance().getPreferences().addPreference(
+        self._application.getPreferences().addPreference(
             "3d_print_log/include_filament_name",
             True
         )
 
-        CuraApplication.getInstance().engineCreatedSignal.connect(self._onEngineCreated)
+        self._application.engineCreatedSignal.connect(self._onEngineCreated)
 
-    def _resetPreferencesToDefault(self):
-
-        CuraApplication.getInstance().getPreferences().resetPreference(
-            "3d_print_log/logged_settings")
-        CuraApplication.getInstance().getPreferences().resetPreference(
-            "3d_print_log/include_profile_name")
-        CuraApplication.getInstance().getPreferences().resetPreference(
-            "3d_print_log/include_filament_name")
-
-    def _onMenuButtonClicked(self):
+    def _onSendMenuButtonClicked(self):
         '''Executed when the menu button is clicked.'''
         send_to_3D_print_log = self._hasSlicedModel()
         if not send_to_3D_print_log:
@@ -150,10 +141,10 @@ class PrintLogUploader(QObject, Extension):
 
             settings = dict()
             settings["note"] = self._generateNotes()
-            settings["print_name"] = self.getPrintName()
-            settings.update(self.getCuraMetadata())
-            settings.update(self.getPrintTime())
-            settings.update(self.getMaterialUsage())
+            settings["print_name"] = self._getPrintName()
+            settings.update(self._getCuraMetadata())
+            settings.update(self._getPrintTime())
+            settings.update(self._getMaterialUsage())
 
             data["settings"] = settings
 
@@ -246,7 +237,7 @@ class PrintLogUploader(QObject, Extension):
         '''Handle the response from the API after sending the settings.'''
         status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
         if status_code == 200:
-            # API will return a GUID that represents the setting information that was saved.
+            # API will return a GUID that can be used to retrieve the setting information that was saved.
             results = json.loads(reply.readAll().data().decode("utf-8"))
             newGuid = results["newSettingId"]
 
@@ -281,7 +272,7 @@ class PrintLogUploader(QObject, Extension):
         url = self.new_print_url + "?" + query_params
         webbrowser.open(url, new=0, autoraise=True)
 
-    def getCuraMetadata(self):
+    def _getCuraMetadata(self):
         '''Returns meta data about cura and the plugin itself.'''
         data = dict()
         data["time_stamp"] = time.time()
@@ -291,7 +282,7 @@ class PrintLogUploader(QObject, Extension):
 
         return data
 
-    def getPrintTime(self):
+    def _getPrintTime(self):
         '''Returns the estimated print time in seconds.'''
         data = dict()
         print_information = self._application.getPrintInformation()
@@ -300,7 +291,7 @@ class PrintLogUploader(QObject, Extension):
 
         return data
 
-    def getPrintName(self):
+    def _getPrintName(self):
         '''Returns the name of the Print Object.'''
         for node in DepthFirstIterator(self._application.getController().getScene().getRoot()):
             if node.callDecoration("isSliceable"):
@@ -308,7 +299,7 @@ class PrintLogUploader(QObject, Extension):
 
         return ''
 
-    def getMaterialUsage(self):
+    def _getMaterialUsage(self):
         '''Returns a dictionary containing the material used in milligrams.'''
         print_information = self._application.getPrintInformation()
 

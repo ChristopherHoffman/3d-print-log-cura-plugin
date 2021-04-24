@@ -5,6 +5,8 @@ from UM.FlameProfiler import pyqtSlot
 
 
 class PrintLogSettingsVisibilityHandler(SettingVisibilityHandler):
+    '''Create a custom visibility handler so we can hide/show settings in the dialogs.'''
+
     def __init__(self, parent=None, *args, **kwargs):
         super().__init__(parent=parent, *args, **kwargs)
 
