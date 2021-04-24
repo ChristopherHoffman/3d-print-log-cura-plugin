@@ -2,6 +2,7 @@ import json
 import os
 import platform
 import time
+import collections
 from typing import cast, Optional, Set, TYPE_CHECKING
 
 from PyQt5.QtQml import qmlRegisterType
@@ -216,97 +217,87 @@ class PrintLogUploader(QObject, Extension):
                 continue
 
             if (item in logged_settings):
-                label = global_stack.getProperty(item, "label")
-                value = global_stack.getProperty(item, "value")
-                unit = global_stack.getProperty(item, "unit")
-                categoryData[label] = value
 
-                categoryString = categoryString + "  " + \
-                    str(label) + ": " + str(value)
+                settingNote = self._buildSettingRow(item)
+                categoryData[item] = settingNote
+                categoryString = categoryString + "  " + settingNote + "\n"
 
-                if unit is not None:
-                    categoryString = categoryString + " " + str(unit)
+        # Add the last category if any data exists for it:
+        if (len(categoryData) > 0):
+            notes = notes + categoryString
 
-                categoryString = categoryString + "\n"
+        Logger.log("i", "Final Notes: %s", notes)
+        return data
 
-        # Handle Extruders
+    def _buildSettingRow(self, setting_name) -> str:
+        machine_manager = self._application.getMachineManager()
+        global_stack = machine_manager.activeMachine
+
+        # Get List of all extruders that used filament
         extruders = global_stack.extruderList
         extruders = sorted(
             extruders, key=lambda extruder: extruder.getMetaDataEntry("position"))
 
-        numberOfUsedExtruders = [material for material in self._application.getPrintInformation(
-        ).materialLengths if material > 0]
-        Logger.log("i", "Used Extruders %s", numberOfUsedExtruders)
-        if (len(extruders) > 1 and len(numberOfUsedExtruders) > 1):
+        # Get values for this setting for all extruders
+        settingValues = collections.OrderedDict()
+        for extruder in extruders:
+            extruder_position = int(
+                extruder.getMetaDataEntry("position", "0"))
 
-            for extruder in extruders:
-                extruder_position = int(
-                    extruder.getMetaDataEntry("position", "0"))
+            print_information = self._application.getPrintInformation()
+            if len(print_information.materialLengths) > extruder_position:
+                materialUsed = print_information.materialLengths[extruder_position]
 
-                print_information = self._application.getPrintInformation()
-                if len(print_information.materialLengths) > extruder_position:
-                    materialUsed = print_information.materialLengths[extruder_position]
+                if (materialUsed is None or not (materialUsed > 0)):
+                    continue
 
-                    if (materialUsed is None or not (materialUsed > 0)):
-                        continue
+                # extruderValue = extruder.getProperty(setting_name, "value")
+                # settingValues.append(extruderValue)
+                label = extruder.getProperty(setting_name, "label")
+                value = extruder.getProperty(setting_name, "value")
+                unit = extruder.getProperty(setting_name, "unit")
 
-                notes = notes + "\nExtruder " + str(extruder_position) + ": \n"
+                result = str(value)
 
-                categoryData = dict()
-                categoryString = ''
-                currentCategory = None
-                for index in range(settingDef.rowCount()):
-                    modelIndex = settingDef.createIndex(index, 0)
-                    item = settingDef.data(modelIndex, settingDef.KeyRole)
-                    itemDepth = settingDef.data(
-                        modelIndex, settingDef.DepthRole)
-                    Logger.log("i", "item %s, depth %s", item, itemDepth)
+                if unit and not str(unit).isspace():
+                    if (str(unit) in ["°C", "°F", "%"]):
+                        result = result + str(unit)
+                    else:
+                        result = result + " " + str(unit)
 
-                    # Loop through each setting.
-                    # if "type" is "category" then start a new dict.
-                    type = extruder.getProperty(item, "type")
-                    if type.lower() == "category":
-                        if currentCategory is not None:
-                            # If we have been adding to a current Category, save it and make a new dictionary
-                            if (len(categoryData) > 0):
-                                data[currentCategory] = categoryData
+                Logger.log("i", "Setting: %s, %s, %s,", label, value, unit)
 
-                                notes = notes + categoryString
-                            categoryData = dict()
+                settingValues["Ex " + str(extruder_position + 1)] = result
 
-                        currentCategory = extruder.getProperty(item, "label")
-                        categoryString = currentCategory + "\n"
+        # If the values are all the same, just use the setting and format as:
+        # Layer Height: 0.5mm
+        areAllValuesTheSame = len(list(set(list(settingValues.values())))) == 1
+        if (areAllValuesTheSame):
+            label = global_stack.getProperty(setting_name, "label")
+            value = list(settingValues.values())[0]
 
-                        continue
+            return str(label) + ": " + str(value)
 
-                    if (item in logged_settings):
-                        settablePerExtruder = extruder.getProperty(
-                            item, "settable_per_extruder")
+        # If the values are different, then combine them like:
+        # Layer Height: 0.5 mm (Ex 1), 0.8mm (Ex 2)
 
-                        if settablePerExtruder == True:
-                            label = extruder.getProperty(item, "label")
-                            value = extruder.getProperty(item, "value")
-                            unit = extruder.getProperty(item, "unit")
+        label = global_stack.getProperty(setting_name, "label")
+        result = str(label) + ": "
+        isFirst = True
+        for setting in settingValues:
+            if (not isFirst):
+                result = result + ", "
 
-                            globalValue = global_stack.getProperty(
-                                item, "value")
-                            if (value == globalValue):
-                                # Skip if the value is the same as the Global Value.
-                                continue
+            result = result + \
+                settingValues[setting] + " (" + str(setting) + ")"
 
-                            categoryData[label] = value
+            isFirst = False
 
-                            categoryString = categoryString + "  " + \
-                                str(label) + ": " + str(value)
+        return result
 
-                            if unit is not None:
-                                categoryString = categoryString + \
-                                    " " + str(unit)
-
-                            categoryString = categoryString + "\n"
-
-        Logger.log("i", "Final Notes: %s", notes)
-        return data
+        # label = extruder.getProperty(item, "label")
+        #     value = extruder.getProperty(item, "value")
+        #     unit = extruder.getProperty(item, "unit")
 
     def _shouldSendTo3DPrintLog(self) -> bool:
         '''Returns true if this print should be sent.'''
