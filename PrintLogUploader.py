@@ -39,9 +39,11 @@ class PrintLogUploader(QObject, Extension):
     '''
 
     plugin_version = "1.2.0"
-    new_print_url = "https://localhost:4200/prints/new/cura"
-    api_url = "https://localhost:5001/api/Cura/settings"
-    # new_print_url = "https://www.3dprintlog.com/prints/new/cura"
+    # new_print_url = "https://localhost:4200/prints/new/cura"
+    # api_url = "https://localhost:5001/api/Cura/settings"
+
+    new_print_url = "https://www.3dprintlog.com/prints/new/cura"
+    api_url = "https://api.3dprintlog.com/api/Cura/settings"
 
     default_logged_settings = {
         "layer_height",
