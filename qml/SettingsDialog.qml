@@ -36,87 +36,154 @@ UM.Dialog {
         listview.model.filter = new_filter;
     }
 
-    TextField {
-        id: filterInput
-
-        anchors {
-            top: parent.top
-            left: parent.left
-            right: toggleShowAll.left
-            rightMargin: UM.Theme.getSize("default_margin").width
-        }
-
-        placeholderText: catalog.i18nc("@label:textbox", "Filter...");
-
-        onTextChanged: settingsDialog.updateFilter()
-    }
-
-    CheckBox
+    Column
     {
-        id: toggleShowAll
+        width: parent.width
+        height: parent.height
 
-        anchors {
-            top: parent.top
-            right: parent.right
+        Label
+        {
+            font.bold: true
+            text: "General"
         }
 
-        text: catalog.i18nc("@label:checkbox", "Show all")
-        checked: listview.model.showAll
-        onClicked:
+        UM.TooltipArea
         {
-            listview.model.showAll = checked;
-        }
-    }
+            width: childrenRect.width;
+            height: childrenRect.height;
 
-    ScrollView
-    {
-        id: scrollView
+            text: "Include profile name in the Notes field."
 
-        anchors
-        {
-            top: filterInput.bottom;
-            left: parent.left;
-            right: parent.right;
-            bottom: parent.bottom;
-        }
-        ListView
-        {
-            id:listview
-            model: PrintLogUploader.PrintLogSettingDefinitionsModel
+            CheckBox
             {
-                id: definitionsModel;
-                containerId: Cura.MachineManager.activeMachine.definition.id
-                visibilityHandler: Cura.PrintLogSettingsVisibilityHandler {}
-                showAll: true
-                showAncestors: true
-                expanded: [ "*" ]
-                exclude: [ "machine_settings", "command_line_settings" ]
+                id: includeProfileNameCheckbox
+
+                checked: UM.Preferences.getValue("3d_print_log/include_profile_name")
+                onClicked: UM.Preferences.setValue("3d_print_log/include_profile_name", checked)
+
+                text: "Include Profile Name"
             }
-            delegate:Loader
+        }
+
+
+        UM.TooltipArea
+        {
+            width: childrenRect.width;
+            height: childrenRect.height;
+
+            text: "Include filament/material name in the Notes field."
+
+            CheckBox
             {
-                id: loader
+                id: includeFilamentNameCheckbox
 
-                width: parent.width
-                height: model.type != undefined ? UM.Theme.getSize("section").height : 0;
+                checked: UM.Preferences.getValue("3d_print_log/include_filament_name")
+                onClicked: UM.Preferences.setValue("3d_print_log/include_filament_name",  checked)
 
-                property var definition: model
-                property var settingDefinitionsModel: definitionsModel
+                text: "Include Filament Name"
+            }
+        }
 
-                asynchronous: true
-                source:
+        Item
+        {
+            //: Spacer
+            height: UM.Theme.getSize("default_margin").height
+            width: UM.Theme.getSize("default_margin").width
+        }
+
+        Label
+        {
+            id: settingLabel
+            font.bold: true
+            text: "Settings"
+        }
+
+        Row {
+            id: settingSearchRow
+            width: parent.width
+
+            TextField {
+
+                id: filterInput
+                width: settingSearchRow.width - searchSpacer.width - toggleShowAll.width
+                placeholderText: catalog.i18nc("@label:textbox", "Filter...");
+
+                onTextChanged: settingsDialog.updateFilter()
+            }
+
+            Item
+            {
+                id: searchSpacer
+                //: Spacer
+                height: UM.Theme.getSize("default_margin").height
+                width: UM.Theme.getSize("default_margin").width
+            }
+
+            CheckBox
+            {
+                id: toggleShowAll
+                
+                text: catalog.i18nc("@label:checkbox", "Show all")
+                checked: listview.model.showAll
+                onClicked:
                 {
-                    switch(model.type)
-                    {
-                        case "category":
-                            return "SettingCategory.qml"
-                        default:
-                            return "SettingItem.qml"
-                    }
+                    listview.model.showAll = checked;
                 }
             }
-            Component.onCompleted: settingsDialog.updateFilter()
+        }
+
+        ScrollView
+        {
+            id: scrollView
+
+
+            anchors
+            {
+
+                left: parent.left;
+                right: parent.right;
+
+            }
+            ListView
+            {
+                id:listview
+                model: PrintLogUploader.PrintLogSettingDefinitionsModel
+                {
+                    id: definitionsModel;
+                    containerId: Cura.MachineManager.activeMachine.definition.id
+                    visibilityHandler: Cura.PrintLogSettingsVisibilityHandler {}
+                    showAll: true
+                    showAncestors: true
+                    expanded: [ "*" ]
+                    exclude: [ "machine_settings", "command_line_settings" ]
+                }
+                delegate:Loader
+                {
+                    id: loader
+
+                    width: parent.width
+                    height: model.type != undefined ? UM.Theme.getSize("section").height : 0;
+
+                    property var definition: model
+                    property var settingDefinitionsModel: definitionsModel
+
+                    asynchronous: true
+                    source:
+                    {
+                        switch(model.type)
+                        {
+                            case "category":
+                                return "SettingCategory.qml"
+                            default:
+                                return "SettingItem.qml"
+                        }
+                    }
+                }
+                Component.onCompleted: settingsDialog.updateFilter()
+            }
         }
     }
+    
 
     rightButtons: [
         Button {

@@ -68,6 +68,14 @@ class PrintLogUploader(QObject, Extension):
             "3d_print_log/logged_settings",
             ";".join(default_logged_settings)
         )
+        CuraApplication.getInstance().getPreferences().addPreference(
+            "3d_print_log/include_profile_name",
+            True
+        )
+        CuraApplication.getInstance().getPreferences().addPreference(
+            "3d_print_log/include_filament_name",
+            False
+        )
 
         CuraApplication.getInstance().engineCreatedSignal.connect(self._onEngineCreated)
 
