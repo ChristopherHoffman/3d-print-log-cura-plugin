@@ -5,6 +5,7 @@ import QtQuick 2.2
 import QtQuick.Controls 1.2
 import QtQuick.Controls.Styles 1.2
 import QtQuick.Window 2.2
+import QtQuick.Layouts 1.1
 
 import UM 1.2 as UM
 import Cura 1.0 as Cura
@@ -36,10 +37,9 @@ UM.Dialog {
         listview.model.filter = new_filter;
     }
 
-    Column
+    ColumnLayout
     {
-        width: parent.width
-        height: parent.height
+        anchors.fill: parent
 
         Label
         {
@@ -100,7 +100,7 @@ UM.Dialog {
 
         Row {
             id: settingSearchRow
-            width: parent.width
+            Layout.fillWidth: true
 
             TextField {
 
@@ -135,15 +135,9 @@ UM.Dialog {
         ScrollView
         {
             id: scrollView
+            Layout.fillHeight: true
+            Layout.fillWidth: true
 
-
-            anchors
-            {
-
-                left: parent.left;
-                right: parent.right;
-
-            }
             ListView
             {
                 id:listview
