@@ -229,6 +229,82 @@ class PrintLogUploader(QObject, Extension):
 
                 categoryString = categoryString + "\n"
 
+        # Handle Extruders
+        extruders = global_stack.extruderList
+        extruders = sorted(
+            extruders, key=lambda extruder: extruder.getMetaDataEntry("position"))
+
+        numberOfUsedExtruders = [material for material in self._application.getPrintInformation(
+        ).materialLengths if material > 0]
+        Logger.log("i", "Used Extruders %s", numberOfUsedExtruders)
+        if (len(extruders) > 1 and len(numberOfUsedExtruders) > 1):
+
+            for extruder in extruders:
+                extruder_position = int(
+                    extruder.getMetaDataEntry("position", "0"))
+
+                print_information = self._application.getPrintInformation()
+                if len(print_information.materialLengths) > extruder_position:
+                    materialUsed = print_information.materialLengths[extruder_position]
+
+                    if (materialUsed is None or not (materialUsed > 0)):
+                        continue
+
+                notes = notes + "\nExtruder " + str(extruder_position) + ": \n"
+
+                categoryData = dict()
+                categoryString = ''
+                currentCategory = None
+                for index in range(settingDef.rowCount()):
+                    modelIndex = settingDef.createIndex(index, 0)
+                    item = settingDef.data(modelIndex, settingDef.KeyRole)
+                    itemDepth = settingDef.data(
+                        modelIndex, settingDef.DepthRole)
+                    Logger.log("i", "item %s, depth %s", item, itemDepth)
+
+                    # Loop through each setting.
+                    # if "type" is "category" then start a new dict.
+                    type = extruder.getProperty(item, "type")
+                    if type.lower() == "category":
+                        if currentCategory is not None:
+                            # If we have been adding to a current Category, save it and make a new dictionary
+                            if (len(categoryData) > 0):
+                                data[currentCategory] = categoryData
+
+                                notes = notes + categoryString
+                            categoryData = dict()
+
+                        currentCategory = extruder.getProperty(item, "label")
+                        categoryString = currentCategory + "\n"
+
+                        continue
+
+                    if (item in logged_settings):
+                        settablePerExtruder = extruder.getProperty(
+                            item, "settable_per_extruder")
+
+                        if settablePerExtruder == True:
+                            label = extruder.getProperty(item, "label")
+                            value = extruder.getProperty(item, "value")
+                            unit = extruder.getProperty(item, "unit")
+
+                            globalValue = global_stack.getProperty(
+                                item, "value")
+                            if (value == globalValue):
+                                # Skip if the value is the same as the Global Value.
+                                continue
+
+                            categoryData[label] = value
+
+                            categoryString = categoryString + "  " + \
+                                str(label) + ": " + str(value)
+
+                            if unit is not None:
+                                categoryString = categoryString + \
+                                    " " + str(unit)
+
+                            categoryString = categoryString + "\n"
+
         Logger.log("i", "Final Notes: %s", notes)
         return data
 
