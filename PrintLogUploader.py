@@ -1,19 +1,17 @@
 import json
 import os
-import platform
 import time
 import collections
-from typing import cast, Optional, Set, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from PyQt5.QtQml import qmlRegisterType
-from PyQt5.QtCore import pyqtSlot, QObject, QUrl, QBuffer
+from PyQt5.QtCore import QObject, QBuffer
 from PyQt5.QtNetwork import QNetworkRequest
 from PyQt5.QtWidgets import QMessageBox
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap
 
 from cura.CuraApplication import CuraApplication
-from cura.Machines.ContainerTree import ContainerTree
-from cura.Snapshot import Snapshot
+
 from UM.Extension import Extension
 from UM.Scene.Iterator.DepthFirstIterator import DepthFirstIterator
 from UM.i18n import i18nCatalog
@@ -88,6 +86,10 @@ class PrintLogUploader(QObject, Extension):
             "3d_print_log/include_filament_name",
             True
         )
+        self._application.getPreferences().addPreference(
+            "3d_print_log/include_snapshot",
+            True
+        )
 
         self._application.engineCreatedSignal.connect(self._onEngineCreated)
 
@@ -140,7 +142,6 @@ class PrintLogUploader(QObject, Extension):
         try:
 
             Logger.log("i", "Generating Test Log")
-            snapshot = self.generateSnapshot()
 
             data = dict()
             data["curaVersion"] = self._application.getVersion()
@@ -153,9 +154,15 @@ class PrintLogUploader(QObject, Extension):
             settings.update(self._getPrintTime())
             settings.update(self._getMaterialUsage())
 
-            if snapshot:
-                settings["snapshot"] = snapshot.data(
-                ).toBase64().data().decode("utf-8")
+            preferences = self._application.getInstance().getPreferences()
+            include_snapshot = preferences.getValue(
+                "3d_print_log/include_snapshot")
+            if (include_snapshot):
+                snapshot = self.generateSnapshot()
+
+                if snapshot:
+                    settings["snapshot"] = snapshot.data(
+                    ).toBase64().data().decode("utf-8")
 
             data["settings"] = settings
 
@@ -287,21 +294,21 @@ class PrintLogUploader(QObject, Extension):
         try:
             Logger.log("i", "Generating Snapshot")
             # Attempt to store the thumbnail, if any:
-            # backend = CuraApplication.getInstance().getBackend()
-            # snapshot = None if getattr(
-            #     backend, "getLatestSnapshot", None) is None else backend.getLatestSnapshot()
+            backend = CuraApplication.getInstance().getBackend()
+            snapshot = None if getattr(
+                backend, "getLatestSnapshot", None) is None else backend.getLatestSnapshot()
 
-            snapshot = None
-            if not CuraApplication.getInstance().isVisible:
-                Logger.log(
-                    "i", "Can't create snapshot when renderer not initialized.")
-                return None
-            Logger.log("i", "Creating thumbnail image.")
-            try:
-                snapshot = Snapshot.snapshot(width=600, height=600)
-            except:
-                Logger.log("e", "Failed to create snapshot image")
-                return None  # Failing to create thumbnail should not fail creation of UFP
+            # snapshot = None
+            # if not CuraApplication.getInstance().isVisible:
+            #     Logger.log(
+            #         "i", "Can't create snapshot when renderer not initialized.")
+            #     return None
+            # Logger.log("i", "Creating thumbnail image.")
+            # try:
+            #     snapshot = Snapshot.snapshot(width=600, height=600)
+            # except:
+            #     Logger.log("e", "Failed to create snapshot image")
+            #     return None  # Failing to create thumbnail should not fail creation of UFP
 
             if snapshot:
                 Logger.log("i", "Snapshot Found")
@@ -312,9 +319,9 @@ class PrintLogUploader(QObject, Extension):
                 thumbnail_buffer.open(QBuffer.ReadWrite)
                 snapshot.save(thumbnail_buffer, "PNG")
 
-                f = open('C:/Temp/Snapshot.png', 'wb')
-                f.write(thumbnail_buffer.data())
-                f.close()
+                # f = open('C:/Temp/Snapshot.png', 'wb')
+                # f.write(thumbnail_buffer.data())
+                # f.close()
                 return thumbnail_buffer
             else:
                 Logger.log("i", "No Snapshot Found")

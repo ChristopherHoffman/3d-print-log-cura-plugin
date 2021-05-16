@@ -81,6 +81,24 @@ UM.Dialog {
             }
         }
 
+        UM.TooltipArea
+        {
+            width: childrenRect.width;
+            height: childrenRect.height;
+
+            text: "Include Snapshot of Model."
+
+            CheckBox
+            {
+                id: includeSnapshotCheckbox
+
+                checked: UM.Preferences.getValue("3d_print_log/include_snapshot")
+                onClicked: UM.Preferences.setValue("3d_print_log/include_snapshot",  checked)
+
+                text: "Include Model Snapshot"
+            }
+        }
+
         Item
         {
             //: Spacer
@@ -190,6 +208,9 @@ UM.Dialog {
 
                 UM.Preferences.resetPreference("3d_print_log/include_filament_name")
                 includeFilamentNameCheckbox.checked = UM.Preferences.getValue("3d_print_log/include_filament_name")
+
+                UM.Preferences.resetPreference("3d_print_log/include_snapshot")
+                includeSnapshotCheckbox.checked = UM.Preferences.getValue("3d_print_log/include_snapshot")
                 
                 settingsDialog.visible = false;
             }
