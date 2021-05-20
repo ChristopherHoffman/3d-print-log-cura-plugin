@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- Added ability to send a snapshot of the build plate as the print image. (Enabled by default).
+
 ## 1.2.0
 
 - Added Settings Dialog to allow for customizing of what settings are logged.
