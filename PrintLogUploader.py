@@ -37,9 +37,9 @@ class PrintLogUploader(QObject, Extension):
     Requires the user to have an account and be logged into 3D Print Log before they can save any information.
     '''
 
-    plugin_version = "1.2.0"
     # new_print_url = "https://localhost:4200/prints/new/cura"
     # api_url = "https://localhost:5001/api/Cura/settings"
+    plugin_version = "1.2.1"
 
     new_print_url = "https://www.3dprintlog.com/prints/new/cura"
     api_url = "https://api.3dprintlog.com/api/Cura/settings"
@@ -158,7 +158,7 @@ class PrintLogUploader(QObject, Extension):
             include_snapshot = preferences.getValue(
                 "3d_print_log/include_snapshot")
             if (include_snapshot):
-                snapshot = self.generateSnapshot()
+                snapshot = self._generateSnapshot()
 
                 if snapshot:
                     settings["snapshot"] = snapshot.data(
@@ -290,7 +290,8 @@ class PrintLogUploader(QObject, Extension):
         url = self.new_print_url + "?" + query_params
         webbrowser.open(url, new=0, autoraise=True)
 
-    def generateSnapshot(self) -> Optional[QBuffer]:
+    def _generateSnapshot(self) -> Optional[QBuffer]:
+        '''Grabs the snapshot from the Cura Backend if one exists and returns it as a buffer.'''
         try:
             Logger.log("i", "Generating Snapshot")
             # Attempt to store the thumbnail, if any:
@@ -298,40 +299,21 @@ class PrintLogUploader(QObject, Extension):
             snapshot = None if getattr(
                 backend, "getLatestSnapshot", None) is None else backend.getLatestSnapshot()
 
-            # snapshot = None
-            # if not CuraApplication.getInstance().isVisible:
-            #     Logger.log(
-            #         "i", "Can't create snapshot when renderer not initialized.")
-            #     return None
-            # Logger.log("i", "Creating thumbnail image.")
-            # try:
-            #     snapshot = Snapshot.snapshot(width=600, height=600)
-            # except:
-            #     Logger.log("e", "Failed to create snapshot image")
-            #     return None  # Failing to create thumbnail should not fail creation of UFP
-
             if snapshot:
                 Logger.log("i", "Snapshot Found")
-
-                # thumbnail = archive.getStream("/Metadata/thumbnail.png")
 
                 thumbnail_buffer = QBuffer()
                 thumbnail_buffer.open(QBuffer.ReadWrite)
                 snapshot.save(thumbnail_buffer, "PNG")
 
-                # f = open('C:/Temp/Snapshot.png', 'wb')
-                # f.write(thumbnail_buffer.data())
-                # f.close()
                 return thumbnail_buffer
             else:
                 Logger.log("i", "No Snapshot Found")
                 return None
 
-                # thumbnail.write(thumbnail_buffer.data())
-
         except Exception:
             Logger.logException(
-                "e", "Exception raised saving snapshot")
+                "e", "Exception raised while saving snapshot")
             return None
 
     def _getCuraMetadata(self):
