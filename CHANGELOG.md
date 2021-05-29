@@ -8,6 +8,7 @@
 
 - Added Settings Dialog to allow for customizing of what settings are logged.
 - Added option to record Profile Name and Filament Names
+- Minimum supported version: Cura 4.5
 
 ## 1.1.0
 

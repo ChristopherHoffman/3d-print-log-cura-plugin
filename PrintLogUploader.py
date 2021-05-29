@@ -161,8 +161,7 @@ class PrintLogUploader(QObject, Extension):
                 snapshot = self._generateSnapshot()
 
                 if snapshot:
-                    settings["snapshot"] = snapshot.data(
-                    ).toBase64().data().decode("utf-8")
+                    settings["snapshot"] = snapshot
 
             data["settings"] = settings
 
@@ -290,14 +289,26 @@ class PrintLogUploader(QObject, Extension):
         url = self.new_print_url + "?" + query_params
         webbrowser.open(url, new=0, autoraise=True)
 
-    def _generateSnapshot(self) -> Optional[QBuffer]:
+    def _generateSnapshot(self) -> Optional[str]:
         '''Grabs the snapshot from the Cura Backend if one exists and returns it as a buffer.'''
         try:
             Logger.log("i", "Generating Snapshot")
-            # Attempt to store the thumbnail, if any:
+            # Attempt to get the existing snapshot, if it exists (Cura 4.9 and above):
             backend = CuraApplication.getInstance().getBackend()
             snapshot = None if getattr(
                 backend, "getLatestSnapshot", None) is None else backend.getLatestSnapshot()
+
+            if snapshot is None:
+                Logger.log(
+                    "i", "No snapshot from backend, generate snapshot ourselves.")
+                # Try to generate a snapshot ourselves (for Cura 4.8 and before, but is not reliable (I think due to threading))
+                try:
+                    from cura.Snapshot import Snapshot
+
+                    snapshot = Snapshot.snapshot(width=300, height=300)
+                except:
+                    Logger.log("e", "Failed to create snapshot image")
+                    return None
 
             if snapshot:
                 Logger.log("i", "Snapshot Found")
@@ -306,7 +317,12 @@ class PrintLogUploader(QObject, Extension):
                 thumbnail_buffer.open(QBuffer.ReadWrite)
                 snapshot.save(thumbnail_buffer, "PNG")
 
-                return thumbnail_buffer
+                encodedSnapshot = thumbnail_buffer.data(
+                ).toBase64().data().decode("utf-8")
+
+                thumbnail_buffer.close()
+
+                return encodedSnapshot
             else:
                 Logger.log("i", "No Snapshot Found")
                 return None
