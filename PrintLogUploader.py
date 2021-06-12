@@ -1,18 +1,17 @@
 import json
 import os
-import platform
 import time
 import collections
-from typing import cast, Optional, Set, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from PyQt5.QtQml import qmlRegisterType
-from PyQt5.QtCore import pyqtSlot, QObject, QUrl
+from PyQt5.QtCore import QObject, QBuffer
 from PyQt5.QtNetwork import QNetworkRequest
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap
 
 from cura.CuraApplication import CuraApplication
-from cura.Machines.ContainerTree import ContainerTree
+
 from UM.Extension import Extension
 from UM.Scene.Iterator.DepthFirstIterator import DepthFirstIterator
 from UM.i18n import i18nCatalog
@@ -38,9 +37,9 @@ class PrintLogUploader(QObject, Extension):
     Requires the user to have an account and be logged into 3D Print Log before they can save any information.
     '''
 
-    plugin_version = "1.2.0"
     # new_print_url = "https://localhost:4200/prints/new/cura"
     # api_url = "https://localhost:5001/api/Cura/settings"
+    plugin_version = "1.2.1"
 
     new_print_url = "https://www.3dprintlog.com/prints/new/cura"
     api_url = "https://api.3dprintlog.com/api/Cura/settings"
@@ -85,6 +84,10 @@ class PrintLogUploader(QObject, Extension):
         )
         self._application.getPreferences().addPreference(
             "3d_print_log/include_filament_name",
+            True
+        )
+        self._application.getPreferences().addPreference(
+            "3d_print_log/include_snapshot",
             True
         )
 
@@ -137,6 +140,9 @@ class PrintLogUploader(QObject, Extension):
     def _sendTo3DPrintLog(self):
         '''Gets the print settings and send them to 3D Print Log'''
         try:
+
+            Logger.log("i", "Generating Test Log")
+
             data = dict()
             data["curaVersion"] = self._application.getVersion()
             data["pluginVersion"] = self.plugin_version
@@ -147,6 +153,15 @@ class PrintLogUploader(QObject, Extension):
             settings.update(self._getCuraMetadata())
             settings.update(self._getPrintTime())
             settings.update(self._getMaterialUsage())
+
+            preferences = self._application.getInstance().getPreferences()
+            include_snapshot = preferences.getValue(
+                "3d_print_log/include_snapshot")
+            if (include_snapshot):
+                snapshot = self._generateSnapshot()
+
+                if snapshot:
+                    settings["snapshot"] = snapshot
 
             data["settings"] = settings
 
@@ -273,6 +288,49 @@ class PrintLogUploader(QObject, Extension):
         query_params = urlencode(data)
         url = self.new_print_url + "?" + query_params
         webbrowser.open(url, new=0, autoraise=True)
+
+    def _generateSnapshot(self) -> Optional[str]:
+        '''Grabs the snapshot from the Cura Backend if one exists and returns it as a buffer.'''
+        try:
+            Logger.log("i", "Generating Snapshot")
+            # Attempt to get the existing snapshot, if it exists (Cura 4.9 and above):
+            backend = CuraApplication.getInstance().getBackend()
+            snapshot = None if getattr(
+                backend, "getLatestSnapshot", None) is None else backend.getLatestSnapshot()
+
+            if snapshot is None:
+                Logger.log(
+                    "i", "No snapshot from backend, generate snapshot ourselves.")
+                # Try to generate a snapshot ourselves (for Cura 4.8 and before, but is not reliable (I think due to threading))
+                try:
+                    from cura.Snapshot import Snapshot
+
+                    snapshot = Snapshot.snapshot(width=300, height=300)
+                except:
+                    Logger.log("e", "Failed to create snapshot image")
+                    return None
+
+            if snapshot:
+                Logger.log("i", "Snapshot Found")
+
+                thumbnail_buffer = QBuffer()
+                thumbnail_buffer.open(QBuffer.ReadWrite)
+                snapshot.save(thumbnail_buffer, "PNG")
+
+                encodedSnapshot = thumbnail_buffer.data(
+                ).toBase64().data().decode("utf-8")
+
+                thumbnail_buffer.close()
+
+                return encodedSnapshot
+            else:
+                Logger.log("i", "No Snapshot Found")
+                return None
+
+        except Exception:
+            Logger.logException(
+                "e", "Exception raised while saving snapshot")
+            return None
 
     def _getCuraMetadata(self):
         '''Returns meta data about cura and the plugin itself.'''

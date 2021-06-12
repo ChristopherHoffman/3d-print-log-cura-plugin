@@ -1,9 +1,14 @@
 # Changelog
 
+## 1.2.1
+
+- Added ability to send a snapshot of the build plate as the print image. (Enabled by default).
+
 ## 1.2.0
 
 - Added Settings Dialog to allow for customizing of what settings are logged.
 - Added option to record Profile Name and Filament Names
+- Minimum supported version: Cura 4.5
 
 ## 1.1.0
 
