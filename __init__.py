@@ -1,7 +1,7 @@
 from . import PrintLogUploader
 from . import PrintLogSettingDefinitionsModel
 
-from PyQt5.QtQml import qmlRegisterType
+from PyQt6.QtQml import qmlRegisterType
 
 
 def getMetaData():
