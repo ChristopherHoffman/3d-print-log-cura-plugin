@@ -4,11 +4,11 @@ import time
 import collections
 from typing import Optional, TYPE_CHECKING
 
-from PyQt5.QtQml import qmlRegisterType
-from PyQt5.QtCore import QObject, QBuffer
-from PyQt5.QtNetwork import QNetworkRequest
-from PyQt5.QtWidgets import QMessageBox
-from PyQt5.QtGui import QPixmap
+from PyQt6.QtQml import qmlRegisterType
+from PyQt6.QtCore import QObject, QBuffer
+from PyQt6.QtNetwork import QNetworkRequest
+from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtGui import QPixmap
 
 from cura.CuraApplication import CuraApplication
 
@@ -25,7 +25,7 @@ from . import PrintLogSettingsVisibilityHandler
 from . import PrintLogSettingDefinitionsModel
 
 if TYPE_CHECKING:
-    from PyQt5.QtNetwork import QNetworkReply
+    from PyQt6.QtNetwork import QNetworkReply
 
 
 catalog = i18nCatalog("cura")
@@ -37,8 +37,8 @@ class PrintLogUploader(QObject, Extension):
     Requires the user to have an account and be logged into 3D Print Log before they can save any information.
     '''
 
-    # new_print_url = "https://localhost:4200/prints/new/cura"
-    # api_url = "https://localhost:5001/api/Cura/settings"
+    #new_print_url = "https://localhost:4200/prints/new/cura"
+    #api_url = "https://localhost:5001/api/Cura/settings"
     plugin_version = "1.2.1"
 
     new_print_url = "https://www.3dprintlog.com/prints/new/cura"
@@ -252,7 +252,7 @@ class PrintLogUploader(QObject, Extension):
 
     def _onRequestFinished(self, reply: "QNetworkReply") -> None:
         '''Handle the response from the API after sending the settings.'''
-        status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+        status_code = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
         if status_code == 200:
             # API will return a GUID that can be used to retrieve the setting information that was saved.
             results = json.loads(reply.readAll().data().decode("utf-8"))
@@ -314,7 +314,7 @@ class PrintLogUploader(QObject, Extension):
                 Logger.log("i", "Snapshot Found")
 
                 thumbnail_buffer = QBuffer()
-                thumbnail_buffer.open(QBuffer.ReadWrite)
+                thumbnail_buffer.open(QBuffer.OpenModeFlag.ReadWrite)
                 snapshot.save(thumbnail_buffer, "PNG")
 
                 encodedSnapshot = thumbnail_buffer.data(

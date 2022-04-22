@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0
+
+### Breaking Changes:
+
+This update is to support Cura 5, which updated from Qt5 to Qt6. This is a breaking change due to substantial UI changes.
+
+- Added support to Cura 5, removed support for previous SDK versions.
+
 ## 1.2.1
 
 - Added ability to send a snapshot of the build plate as the print image. (Enabled by default).
