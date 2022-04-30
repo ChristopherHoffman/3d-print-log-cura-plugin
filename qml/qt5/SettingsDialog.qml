@@ -1,6 +1,5 @@
 import QtQuick 2.2
 import QtQuick.Controls 1.2
-import QtQuick.Controls.Styles 1.2
 import QtQuick.Window 2.2
 import QtQuick.Layouts 1.1
 
@@ -96,6 +95,24 @@ UM.Dialog {
                 onClicked: UM.Preferences.setValue("3d_print_log/include_snapshot",  checked)
 
                 text: "Include Model Snapshot"
+            }
+        }
+
+        UM.TooltipArea
+        {
+            width: childrenRect.width;
+            height: childrenRect.height;
+
+            text: "Bypass the 'Do you want to send to 3D Print Log' prompt."
+
+            CheckBox
+            {
+                id: bypassPromptCheckbox
+
+                checked: UM.Preferences.getValue("3d_print_log/bypass_prompt")
+                onClicked: UM.Preferences.setValue("3d_print_log/bypass_prompt",  checked)
+
+                text: "Always send to 3D Print Log after saving file"
             }
         }
 
@@ -211,6 +228,10 @@ UM.Dialog {
 
                 UM.Preferences.resetPreference("3d_print_log/include_snapshot")
                 includeSnapshotCheckbox.checked = UM.Preferences.getValue("3d_print_log/include_snapshot")
+
+                UM.Preferences.resetPreference("3d_print_log/bypass_prompt")
+                bypassPromptCheckbox.checked = UM.Preferences.getValue("3d_print_log/bypass_prompt")
+                
                 
                 settingsDialog.visible = false;
             }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.1
+
+- Adds new setting which skips the "Do you want to send to 3D Print Log?" prompt and always send print information after saving.
+- Adds backward compatibility support for Cura 4
+
 ## 2.0.0
 
 ### Breaking Changes:
