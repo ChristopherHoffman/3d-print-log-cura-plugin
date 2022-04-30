@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.2
+
+- Adds new option to bypass the "Would you like to send to 3D Print Log" prompt, with an option to 'Always Ask', to 'Always Send after save', or 'Never Send after save'.
+- Removes the old Bypass Prompt checkbox, since the new dropdown replaces it.
+
 ## 2.0.1
 
 - Adds new setting which skips the "Do you want to send to 3D Print Log?" prompt and always send print information after saving.
