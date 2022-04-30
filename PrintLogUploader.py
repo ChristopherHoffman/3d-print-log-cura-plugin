@@ -50,9 +50,9 @@ class PrintLogUploader(QObject, Extension):
     Requires the user to have an account and be logged into 3D Print Log before they can save any information.
     '''
 
-    #new_print_url = "https://localhost:4200/prints/new/cura"
-    #api_url = "https://localhost:5001/api/Cura/settings"
-    plugin_version = "1.2.1"
+    # new_print_url = "https://localhost:4200/prints/new/cura"
+    # api_url = "https://localhost:5001/api/Cura/settings"
+    plugin_version = ""
 
     new_print_url = "https://www.3dprintlog.com/prints/new/cura"
     api_url = "https://api.3dprintlog.com/api/Cura/settings"
@@ -84,6 +84,11 @@ class PrintLogUploader(QObject, Extension):
 
         self._application.getOutputDeviceManager().writeStarted.connect(self._onWriteStarted)
 
+        ## Load the plugin version
+        pluginInfo = json.load(open(os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "plugin.json")))
+        self.plugin_version = pluginInfo['version']
+
         self.addMenuItem("Send to 3D Print Log", self._onSendMenuButtonClicked)
         self.addMenuItem("Configure Settings to Log", self.showSettingsDialog)
 
@@ -103,13 +108,28 @@ class PrintLogUploader(QObject, Extension):
             "3d_print_log/include_snapshot",
             True
         )
-
         self._application.getPreferences().addPreference(
-            "3d_print_log/bypass_prompt",
-            False
+            "3d_print_log/prompt_settings",
+            "always_ask"
         )
 
+        # Transfer deprecated bypass_prompt to the new combobox value:
+        bypass_prompt = self._application.getPreferences().getValue(
+                "3d_print_log/bypass_prompt")
+        if (bypass_prompt is not None):
+            if (bypass_prompt):
+                self._application.getPreferences().setValue(
+                    "3d_print_log/prompt_settings",
+                    "send_after_save"
+                )
+            # Remove the deprecated value
+            self._application.getPreferences().removePreference(
+                "3d_print_log/bypass_prompt")
+
+
         self._application.engineCreatedSignal.connect(self._onEngineCreated)
+
+
 
     def _onSendMenuButtonClicked(self):
         '''Executed when the menu button is clicked.'''
@@ -208,11 +228,15 @@ class PrintLogUploader(QObject, Extension):
         if not hasSliced:
             return False
 
+        # Check their prompt settings to see if we should send
+
         preferences = self._application.getInstance().getPreferences()
-        bypass_prompt = preferences.getValue(
-                "3d_print_log/bypass_prompt")
-        if (bypass_prompt):
-                return True
+        promptSetting = preferences.getValue(
+                "3d_print_log/prompt_settings")
+        if (promptSetting == "send_after_save"):
+            return True
+        if (promptSetting == "do_not_send"):
+            return False
 
         dialog = self._createConfirmationDialog()
 
