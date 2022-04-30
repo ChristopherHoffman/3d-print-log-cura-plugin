@@ -103,16 +103,69 @@ UM.Dialog {
             width: childrenRect.width;
             height: childrenRect.height;
 
-            text: "Bypass the 'Do you want to send to 3D Print Log' prompt."
+            text: "Should we display a prompt after saving gcode?"
 
-            CheckBox
+            GridLayout
             {
-                id: bypassPromptCheckbox
+                id: interfaceGrid
+                columns: 2
+                width: parent.width
 
-                checked: UM.Preferences.getValue("3d_print_log/bypass_prompt")
-                onClicked: UM.Preferences.setValue("3d_print_log/bypass_prompt",  checked)
+                Label
+                {
+                    id: promptSettingsLabel
+                    text: "Log Print after Gcode Save"
+                }
 
-                text: "Always send to 3D Print Log after saving file"
+                
+
+                ComboBox
+                {
+                    id: promptSettingsComboBox
+
+                    textRole: "text"
+                    model: ListModel
+                    {
+                        id: promptList
+
+                        Component.onCompleted:
+                        {
+                            append({ text: "Always Ask", code: "always_ask" })
+                            append({ text: "Always Send to 3D Print Log", code: "send_after_save" })
+                            append({ text: "Never Send to 3D Print Log", code: "do_not_send" })
+                        }
+                    }
+
+                    currentIndex: {
+                        var code = UM.Preferences.getValue("3d_print_log/prompt_settings");
+                        for(var i = 0; i < promptList.count; ++i)
+                        {
+                            if(model.get(i).code == code)
+                            {
+                                return i
+                            }
+                        }
+                    }
+
+                    onActivated:
+                    {
+                        if (model.get(index).code != "")
+                        {
+                            UM.Preferences.setValue("3d_print_log/prompt_settings", model.get(index).code);
+                        }
+                        else
+                        {
+                            var code = UM.Preferences.getValue("3d_print_log/prompt_settings");
+                            for(var i = 0; i < promptList.count; ++i)
+                            {
+                                if(model.get(i).code == code)
+                                {
+                                    currentIndex = i
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -229,10 +282,9 @@ UM.Dialog {
                 UM.Preferences.resetPreference("3d_print_log/include_snapshot")
                 includeSnapshotCheckbox.checked = UM.Preferences.getValue("3d_print_log/include_snapshot")
 
-                UM.Preferences.resetPreference("3d_print_log/bypass_prompt")
-                bypassPromptCheckbox.checked = UM.Preferences.getValue("3d_print_log/bypass_prompt")
-                
-                
+                UM.Preferences.resetPreference("3d_print_log/prompt_settings")
+                promptSettingsComboBox.setCurrentIndex()
+
                 settingsDialog.visible = false;
             }
         },
