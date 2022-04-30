@@ -4,11 +4,24 @@ import time
 import collections
 from typing import Optional, TYPE_CHECKING
 
-from PyQt6.QtQml import qmlRegisterType
-from PyQt6.QtCore import QObject, QBuffer
-from PyQt6.QtNetwork import QNetworkRequest
-from PyQt6.QtWidgets import QMessageBox
-from PyQt6.QtGui import QPixmap
+USE_QT5 = False
+try:
+    from PyQt6.QtQml import qmlRegisterType
+    from PyQt6.QtCore import QObject, QBuffer
+    from PyQt6.QtNetwork import QNetworkRequest
+    from PyQt6.QtWidgets import QMessageBox
+    from PyQt6.QtGui import QPixmap
+    if TYPE_CHECKING:
+        from PyQt6.QtNetwork import QNetworkReply
+except ImportError:
+    from PyQt5.QtQml import qmlRegisterType
+    from PyQt5.QtCore import QObject, QBuffer
+    from PyQt5.QtNetwork import QNetworkRequest
+    from PyQt5.QtWidgets import QMessageBox
+    from PyQt5.QtGui import QPixmap
+    if TYPE_CHECKING:
+        from PyQt5.QtNetwork import QNetworkReply
+    USE_QT5 = True
 
 from cura.CuraApplication import CuraApplication
 
@@ -112,8 +125,14 @@ class PrintLogUploader(QObject, Extension):
         )
 
     def showSettingsDialog(self):
-        path = os.path.join(os.path.dirname(
-            os.path.abspath(__file__)), "qml", "SettingsDialog.qml")
+        path = None
+        if USE_QT5:
+            path = os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "qml", "qt5", "SettingsDialog.qml")
+        else:
+            path = os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "qml", "qt6","SettingsDialog.qml")
+
         self._settings_dialog = CuraApplication.getInstance(
         ).createQmlComponent(path, {"manager": self})
         self._settings_dialog.show()
@@ -252,7 +271,13 @@ class PrintLogUploader(QObject, Extension):
 
     def _onRequestFinished(self, reply: "QNetworkReply") -> None:
         '''Handle the response from the API after sending the settings.'''
-        status_code = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
+        status_code = None
+
+        if USE_QT5:
+            status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+        else:
+            status_code = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
+
         if status_code == 200:
             # API will return a GUID that can be used to retrieve the setting information that was saved.
             results = json.loads(reply.readAll().data().decode("utf-8"))
@@ -314,7 +339,10 @@ class PrintLogUploader(QObject, Extension):
                 Logger.log("i", "Snapshot Found")
 
                 thumbnail_buffer = QBuffer()
-                thumbnail_buffer.open(QBuffer.OpenModeFlag.ReadWrite)
+                if USE_QT5:
+                    thumbnail_buffer.open(QBuffer.ReadWrite)
+                else:
+                    thumbnail_buffer.open(QBuffer.OpenModeFlag.ReadWrite)
                 snapshot.save(thumbnail_buffer, "PNG")
 
                 encodedSnapshot = thumbnail_buffer.data(
