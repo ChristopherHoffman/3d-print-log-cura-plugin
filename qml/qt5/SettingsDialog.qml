@@ -98,6 +98,24 @@ UM.Dialog {
             }
         }
 
+        UM.TooltipArea
+        {
+            width: childrenRect.width;
+            height: childrenRect.height;
+
+            text: "Bypass the 'Do you want to send to 3D Print Log' prompt."
+
+            CheckBox
+            {
+                id: bypassPromptCheckbox
+
+                checked: UM.Preferences.getValue("3d_print_log/bypass_prompt")
+                onClicked: UM.Preferences.setValue("3d_print_log/bypass_prompt",  checked)
+
+                text: "Always send to 3D Print Log after saving file"
+            }
+        }
+
         Item
         {
             //: Spacer
@@ -210,6 +228,10 @@ UM.Dialog {
 
                 UM.Preferences.resetPreference("3d_print_log/include_snapshot")
                 includeSnapshotCheckbox.checked = UM.Preferences.getValue("3d_print_log/include_snapshot")
+
+                UM.Preferences.resetPreference("3d_print_log/bypass_prompt")
+                bypassPromptCheckbox.checked = UM.Preferences.getValue("3d_print_log/bypass_prompt")
+                
                 
                 settingsDialog.visible = false;
             }
