@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- Re-adds backward compatibility support for Cura 4
+
 ## 2.0.0
 
 ### Breaking Changes:
