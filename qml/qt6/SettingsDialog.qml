@@ -13,6 +13,8 @@ UM.Dialog {
     title: catalog.i18nc("@title:window", "Select Settings to Log")
     width: screenScaleFactor * 360
 
+    backgroundColor: UM.Theme.getColor("background_1")
+
     onVisibilityChanged:
     {
         if(visible)
@@ -215,14 +217,27 @@ UM.Dialog {
             }
         }
 
+        Item
+        {
+            id: scrollViewSpacer
+            //: Spacer
+            height: 1
+            width: UM.Theme.getSize("default_margin").width
+        }
+
         ScrollView
         {
             id: scrollView
             Layout.fillHeight: true
             Layout.fillWidth: true
 
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
             ListView
             {
+                ScrollBar.vertical: UM.ScrollBar { id: scrollBar }
+                clip: true
+
                 id:listview
                 model: PrintLogUploader.PrintLogSettingDefinitionsModel
                 {
@@ -238,7 +253,7 @@ UM.Dialog {
                 {
                     id: loader
 
-                    width: parent.width
+                    width: parent.width - 8
                     height: model.type != undefined ? UM.Theme.getSize("section").height : 0;
 
                     property var definition: model
