@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.3
+
+- Fix the Settings dialog to properly display the Setting Category.
+- Settings Dialog will now display with the correct Cura Theme.
+
 ## 2.0.2
 
 - Adds new option to bypass the "Would you like to send to 3D Print Log" prompt, with an option to 'Always Ask', to 'Always Send after save', or 'Never Send after save'.
