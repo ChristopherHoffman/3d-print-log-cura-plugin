@@ -12,7 +12,7 @@ UM.TooltipArea
     width: childrenRect.width;
     height: childrenRect.height;
 
-    CheckBox
+    UM.CheckBox
     {
         id: check
 

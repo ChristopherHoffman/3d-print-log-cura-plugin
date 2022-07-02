@@ -39,7 +39,7 @@ UM.Dialog {
     {
         anchors.fill: parent
 
-        Label
+        UM.Label
         {
             font.bold: true
             text: "General"
@@ -52,7 +52,7 @@ UM.Dialog {
 
             text: "Include profile name in the Notes field."
 
-            CheckBox
+            UM.CheckBox
             {
                 id: includeProfileNameCheckbox
 
@@ -71,7 +71,7 @@ UM.Dialog {
 
             text: "Include filament/material name in the Notes field."
 
-            CheckBox
+            UM.CheckBox
             {
                 id: includeFilamentNameCheckbox
 
@@ -89,7 +89,7 @@ UM.Dialog {
 
             text: "Include Snapshot of Model."
 
-            CheckBox
+            UM.CheckBox
             {
                 id: includeSnapshotCheckbox
 
@@ -176,7 +176,7 @@ UM.Dialog {
             width: UM.Theme.getSize("default_margin").width
         }
 
-        Label
+        UM.Label
         {
             id: settingLabel
             font.bold: true
@@ -204,7 +204,7 @@ UM.Dialog {
                 width: UM.Theme.getSize("default_margin").width
             }
 
-            CheckBox
+            UM.CheckBox
             {
                 id: toggleShowAll
                 
@@ -217,13 +217,6 @@ UM.Dialog {
             }
         }
 
-        Item
-        {
-            id: scrollViewSpacer
-            //: Spacer
-            height: 1
-            width: UM.Theme.getSize("default_margin").width
-        }
 
         ScrollView
         {
@@ -253,7 +246,7 @@ UM.Dialog {
                 {
                     id: loader
 
-                    width: parent.width - 8
+                    width: parent.width - 14
                     height: model.type != undefined ? UM.Theme.getSize("section").height : 0;
 
                     property var definition: model
