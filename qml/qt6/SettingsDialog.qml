@@ -13,6 +13,8 @@ UM.Dialog {
     title: catalog.i18nc("@title:window", "Select Settings to Log")
     width: screenScaleFactor * 360
 
+    backgroundColor: UM.Theme.getColor("background_1")
+
     onVisibilityChanged:
     {
         if(visible)
@@ -37,7 +39,7 @@ UM.Dialog {
     {
         anchors.fill: parent
 
-        Label
+        UM.Label
         {
             font.bold: true
             text: "General"
@@ -50,7 +52,7 @@ UM.Dialog {
 
             text: "Include profile name in the Notes field."
 
-            CheckBox
+            UM.CheckBox
             {
                 id: includeProfileNameCheckbox
 
@@ -69,7 +71,7 @@ UM.Dialog {
 
             text: "Include filament/material name in the Notes field."
 
-            CheckBox
+            UM.CheckBox
             {
                 id: includeFilamentNameCheckbox
 
@@ -87,7 +89,7 @@ UM.Dialog {
 
             text: "Include Snapshot of Model."
 
-            CheckBox
+            UM.CheckBox
             {
                 id: includeSnapshotCheckbox
 
@@ -174,7 +176,7 @@ UM.Dialog {
             width: UM.Theme.getSize("default_margin").width
         }
 
-        Label
+        UM.Label
         {
             id: settingLabel
             font.bold: true
@@ -202,7 +204,7 @@ UM.Dialog {
                 width: UM.Theme.getSize("default_margin").width
             }
 
-            CheckBox
+            UM.CheckBox
             {
                 id: toggleShowAll
                 
@@ -215,14 +217,20 @@ UM.Dialog {
             }
         }
 
+
         ScrollView
         {
             id: scrollView
             Layout.fillHeight: true
             Layout.fillWidth: true
 
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
             ListView
             {
+                ScrollBar.vertical: UM.ScrollBar { id: scrollBar }
+                clip: true
+
                 id:listview
                 model: PrintLogUploader.PrintLogSettingDefinitionsModel
                 {
@@ -238,7 +246,7 @@ UM.Dialog {
                 {
                     id: loader
 
-                    width: parent.width
+                    width: parent.width - 14
                     height: model.type != undefined ? UM.Theme.getSize("section").height : 0;
 
                     property var definition: model
