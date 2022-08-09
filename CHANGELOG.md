@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.4
+
+- Added a dialog which displays the New Print Url when the plugin was unable to automatically detect and open the webbrowser.
+
 ## 2.0.3
 
 - Fix the Settings dialog to properly display the Setting Category.

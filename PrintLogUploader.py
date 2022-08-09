@@ -7,7 +7,7 @@ from typing import Optional, TYPE_CHECKING
 USE_QT5 = False
 try:
     from PyQt6.QtQml import qmlRegisterType
-    from PyQt6.QtCore import QObject, QBuffer
+    from PyQt6.QtCore import Qt, QObject, QBuffer
     from PyQt6.QtNetwork import QNetworkRequest
     from PyQt6.QtWidgets import QMessageBox
     from PyQt6.QtGui import QPixmap
@@ -15,7 +15,7 @@ try:
         from PyQt6.QtNetwork import QNetworkReply
 except ImportError:
     from PyQt5.QtQml import qmlRegisterType
-    from PyQt5.QtCore import QObject, QBuffer
+    from PyQt5.QtCore import Qt, QObject, QBuffer
     from PyQt5.QtNetwork import QNetworkRequest
     from PyQt5.QtWidgets import QMessageBox
     from PyQt5.QtGui import QPixmap
@@ -348,9 +348,27 @@ class PrintLogUploader(QObject, Extension):
         except ImportError:
             # python3
             from urllib.parse import urlencode
-        query_params = urlencode(data)
-        url = self.new_print_url + "?" + query_params
-        webbrowser.open(url, new=0, autoraise=True)
+        
+        wasOpenSuccessful = True
+        try:
+            query_params = urlencode(data)
+            url = self.new_print_url + "?" + query_params
+
+            Logger.log('d', "Opening url: %s", url)
+
+            wasOpenSuccessful = webbrowser.open(url, new=2, autoraise=True)
+        except:
+            Logger.log("e", "An exception occurred when opening browser.")
+            wasOpenSuccessful = False
+
+        if not wasOpenSuccessful:
+            Logger.log("e", "Could not successfully open default browser")
+
+            box = self._createDialog(
+            "Unable to automatically detect your web browser. Please click the link or copy-and-paste the following URL into your web browser to continue: <br /><br /> <a href=\"" + url + "\">" + url + "</a>", "Unable to open browser")
+            box.setTextInteractionFlags((Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse) if USE_QT5 else (Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse))
+            box.exec()
+
 
     def _generateSnapshot(self) -> Optional[str]:
         '''Grabs the snapshot from the Cura Backend if one exists and returns it as a buffer.'''
