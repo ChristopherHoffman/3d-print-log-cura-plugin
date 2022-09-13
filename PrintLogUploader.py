@@ -197,6 +197,8 @@ class PrintLogUploader(QObject, Extension):
             settings.update(self._getCuraMetadata())
             settings.update(self._getPrintTime())
             settings.update(self._getMaterialUsage())
+            settings.update(self._getMachineMetadata())
+            settings.update(self._getModelInformation())
 
             preferences = self._application.getInstance().getPreferences()
             include_snapshot = preferences.getValue(
@@ -426,6 +428,124 @@ class PrintLogUploader(QObject, Extension):
 
         return data
 
+    def _getMachineMetadata(self):
+        ''' Returns metadata about the currently active machine '''
+        machine_manager = self._application.getMachineManager()
+        global_stack = machine_manager.activeMachine
+
+        data = dict()
+        data["definition_id"] = global_stack.definition.getId()
+        data["manufacturer"] = global_stack.definition.getMetaDataEntry("manufacturer", "")
+
+        Logger.log("i", data)
+
+        return data
+    
+    def _getModelInformationOld(self):
+        data = dict()
+        data["models"] = []
+
+        # Listing all files placed on the build plate
+        for node in DepthFirstIterator(self._application.getController().getScene().getRoot()):
+            if node.callDecoration("isSliceable"):
+                model = dict()
+                model["hash"] = node.getMeshData().getHash()
+                bounding_box = node.getBoundingBox()
+
+                model["scale"] = node.getScale()
+                model["world_scale"] = node.getWorldScale()
+                model["position"] = node.getPosition()
+                model["world_position"] = node.getWorldPosition()
+                model["rotation"] = node.getOrientation()
+                model["world_rotation"] = node.getWorldOrientation()
+                model["name"] = node.getName()
+
+                model["meshData"] = node.getMeshData()
+
+                if not bounding_box:
+                    continue
+                model["bounding_box"] = {"minimum": {"x": bounding_box.minimum.x,
+                                                    "y": bounding_box.minimum.y,
+                                                    "z": bounding_box.minimum.z},
+                                        "maximum": {"x": bounding_box.maximum.x,
+                                                    "y": bounding_box.maximum.y,
+                                                    "z": bounding_box.maximum.z},
+                                        "translation": {"x": "{:.4f}".format(bounding_box.center.x),
+                                                    "y": "{:.4f}".format(bounding_box.center.z),
+                                                    "z": "{:.4f}".format(bounding_box.bottom)},
+                                        "scale": {"x": "{:.2f}".format(bounding_box.width),
+                                                "y": "{:.2f}".format(bounding_box.depth),
+                                                "z": "{:.2f}".format(bounding_box.height)}
+                                                        }
+                model["transformation"] = {"data": str(node.getWorldTransformation(copy = False).getData()).replace("\n", "")}
+                extruder_position = node.callDecoration("getActiveExtruderPosition")
+                model["extruder"] = 0 if extruder_position is None else int(extruder_position)
+
+                model_settings = dict()
+                model_stack = node.callDecoration("getStack")
+                if model_stack:
+                    model_settings["support_enabled"] = model_stack.getProperty("support_enable", "value")
+                    model_settings["support_extruder_nr"] = int(model_stack.getExtruderPositionValueWithDefault("support_extruder_nr"))
+
+                    # Mesh modifiers;
+                    model_settings["infill_mesh"] = model_stack.getProperty("infill_mesh", "value")
+                    model_settings["cutting_mesh"] = model_stack.getProperty("cutting_mesh", "value")
+                    model_settings["support_mesh"] = model_stack.getProperty("support_mesh", "value")
+                    model_settings["anti_overhang_mesh"] = model_stack.getProperty("anti_overhang_mesh", "value")
+
+                    model_settings["wall_line_count"] = model_stack.getProperty("wall_line_count", "value")
+                    model_settings["retraction_enable"] = model_stack.getProperty("retraction_enable", "value")
+
+                    # Infill settings
+                    model_settings["infill_sparse_density"] = model_stack.getProperty("infill_sparse_density", "value")
+                    model_settings["infill_pattern"] = model_stack.getProperty("infill_pattern", "value")
+                    model_settings["gradual_infill_steps"] = model_stack.getProperty("gradual_infill_steps", "value")
+
+                model["model_settings"] = model_settings
+
+                if node.source_mime_type is None:
+                    model["mime_type"] = ""
+                else:
+                    model["mime_type"] = node.source_mime_type.name
+
+                data["models"].append(model)
+        
+        Logger.log("i", data)
+
+        return data
+
+    def _getModelInformation(self):
+        data = dict()
+        data["models"] = []
+
+        # Listing all files placed on the build plate
+        for node in DepthFirstIterator(self._application.getController().getScene().getRoot()):
+            if node.callDecoration("isSliceable"):
+                model = dict()
+
+                bounding_box = node.getBoundingBox()
+                model["name"] = node.getName()
+
+
+
+                if not bounding_box:
+                    continue
+                model["bounding_box"] = {
+                                        "translation": {"x": bounding_box.center.x,
+                                                    "y":bounding_box.center.z,
+                                                    "z":bounding_box.bottom},
+                                        "scale": {"x": bounding_box.width,
+                                                "y": bounding_box.depth,
+                                                "z": bounding_box.height}
+                                                        }
+            
+
+                data["models"].append(model)
+        
+        Logger.log("i", data)
+
+        return data
+
     def _getPrintTime(self):
         '''Returns the estimated print time in seconds.'''
         data = dict()
@@ -500,6 +620,33 @@ class PrintLogUploader(QObject, Extension):
 
             if (len(materials) > 0):
                 notes = notes + "Filament: " + ", ".join(materials) + "\n\n"
+
+        # Add Model Dimensions
+        models = self._getModelInformation()
+        if len(models["models"]) > 0:
+            notes = notes + "Models:\n"
+        for model in models["models"]:
+            notes = notes + "  " + model["name"] + "\n"
+            notes = notes + "    Move: " + "{:.4f}".format(model["bounding_box"]["translation"]["x"]).rstrip('0').rstrip('.') + " x, " \
+                + "{:.4f}".format(model["bounding_box"]["translation"]["y"]).rstrip('0').rstrip('.') + " y, " \
+                + "{:.4f}".format(model["bounding_box"]["translation"]["z"]).rstrip('0').rstrip('.') + " z\n"
+            
+            notes = notes + "    Scale: " + "{:.4f}".format(model["bounding_box"]["scale"]["x"]).rstrip('0').rstrip('.') + " x, " \
+                + "{:.4f}".format(model["bounding_box"]["scale"]["y"]).rstrip('0').rstrip('.') + " y, " \
+                + "{:.4f}".format(model["bounding_box"]["scale"]["z"]).rstrip('0').rstrip('.') + " z\n"
+
+
+                            # model["bounding_box"] = {
+                            #             "translation": {"x": bounding_box.center.x,
+                            #                         "y":bounding_box.center.z,
+                            #                         "z":bounding_box.bottom},
+                            #             "scale": {"x": bounding_box.width,
+                            #                     "y": bounding_box.depth,
+                            #                     "z": bounding_box.height}
+
+        if len(models["models"]) > 0:
+            notes = notes + "\n\n"
+
 
         # Add settings to the notes.
         notes = notes + "Settings:\n"
