@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.5
+
+- Adds a new "Include Object Details in Notes" setting, which is enabled by default. This will add the stl name, position, and size information directly within the Notes section went sent to 3D Print Log.
+- Sends the currently selected machine ID for a future 3D Print Log feature which will automatically select the correct printer.
+
 ## 2.0.4
 
 - Added a dialog which displays the New Print Url when the plugin was unable to automatically detect and open the webbrowser.
