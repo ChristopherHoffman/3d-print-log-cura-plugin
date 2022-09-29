@@ -440,85 +440,11 @@ class PrintLogUploader(QObject, Extension):
 
         data = dict()
         data["definition_id"] = global_stack.definition.getId()
+        data["name"] = global_stack.definition.getName()
         data["manufacturer"] = global_stack.definition.getMetaDataEntry("manufacturer", "")
-
-        Logger.log("i", data)
 
         return data
     
-    def _getModelInformationOld(self):
-        data = dict()
-        data["models"] = []
-
-        # Listing all files placed on the build plate
-        for node in DepthFirstIterator(self._application.getController().getScene().getRoot()):
-            if node.callDecoration("isSliceable"):
-                model = dict()
-                model["hash"] = node.getMeshData().getHash()
-                bounding_box = node.getBoundingBox()
-
-                model["scale"] = node.getScale()
-                model["world_scale"] = node.getWorldScale()
-                model["position"] = node.getPosition()
-                model["world_position"] = node.getWorldPosition()
-                model["rotation"] = node.getOrientation()
-                model["world_rotation"] = node.getWorldOrientation()
-                model["name"] = node.getName()
-
-                model["meshData"] = node.getMeshData()
-
-                if not bounding_box:
-                    continue
-                model["bounding_box"] = {"minimum": {"x": bounding_box.minimum.x,
-                                                    "y": bounding_box.minimum.y,
-                                                    "z": bounding_box.minimum.z},
-                                        "maximum": {"x": bounding_box.maximum.x,
-                                                    "y": bounding_box.maximum.y,
-                                                    "z": bounding_box.maximum.z},
-                                        "translation": {"x": "{:.4f}".format(bounding_box.center.x),
-                                                    "y": "{:.4f}".format(bounding_box.center.z),
-                                                    "z": "{:.4f}".format(bounding_box.bottom)},
-                                        "scale": {"x": "{:.2f}".format(bounding_box.width),
-                                                "y": "{:.2f}".format(bounding_box.depth),
-                                                "z": "{:.2f}".format(bounding_box.height)}
-                                                        }
-                model["transformation"] = {"data": str(node.getWorldTransformation(copy = False).getData()).replace("\n", "")}
-                extruder_position = node.callDecoration("getActiveExtruderPosition")
-                model["extruder"] = 0 if extruder_position is None else int(extruder_position)
-
-                model_settings = dict()
-                model_stack = node.callDecoration("getStack")
-                if model_stack:
-                    model_settings["support_enabled"] = model_stack.getProperty("support_enable", "value")
-                    model_settings["support_extruder_nr"] = int(model_stack.getExtruderPositionValueWithDefault("support_extruder_nr"))
-
-                    # Mesh modifiers;
-                    model_settings["infill_mesh"] = model_stack.getProperty("infill_mesh", "value")
-                    model_settings["cutting_mesh"] = model_stack.getProperty("cutting_mesh", "value")
-                    model_settings["support_mesh"] = model_stack.getProperty("support_mesh", "value")
-                    model_settings["anti_overhang_mesh"] = model_stack.getProperty("anti_overhang_mesh", "value")
-
-                    model_settings["wall_line_count"] = model_stack.getProperty("wall_line_count", "value")
-                    model_settings["retraction_enable"] = model_stack.getProperty("retraction_enable", "value")
-
-                    # Infill settings
-                    model_settings["infill_sparse_density"] = model_stack.getProperty("infill_sparse_density", "value")
-                    model_settings["infill_pattern"] = model_stack.getProperty("infill_pattern", "value")
-                    model_settings["gradual_infill_steps"] = model_stack.getProperty("gradual_infill_steps", "value")
-
-                model["model_settings"] = model_settings
-
-                if node.source_mime_type is None:
-                    model["mime_type"] = ""
-                else:
-                    model["mime_type"] = node.source_mime_type.name
-
-                data["models"].append(model)
-        
-        Logger.log("i", data)
-
-        return data
-
     def _getModelInformation(self):
         data = dict()
         data["models"] = []
@@ -536,18 +462,15 @@ class PrintLogUploader(QObject, Extension):
                 if not bounding_box:
                     continue
                 model["bounding_box"] = {
-                                        "translation": {"x": bounding_box.center.x,
-                                                    "y":bounding_box.center.z,
-                                                    "z":bounding_box.bottom},
-                                        "scale": {"x": bounding_box.width,
-                                                "y": bounding_box.depth,
-                                                "z": bounding_box.height}
-                                                        }
-            
+                    "translation": {"x": bounding_box.center.x,
+                                "y":bounding_box.center.z,
+                                "z":bounding_box.bottom},
+                    "scale": {"x": bounding_box.width,
+                            "y": bounding_box.depth,
+                            "z": bounding_box.height}
+                                    }
 
                 data["models"].append(model)
-        
-        Logger.log("i", data)
 
         return data
 
@@ -776,4 +699,7 @@ class PrintLogUploader(QObject, Extension):
     
     def _formatNumber(self, number, numberOfDigitsToDisplay) -> str:
         '''Formats a number to the specified number of digits, trimming any trailing 0's'''
-        return ("{:.%sf}" % numberOfDigitsToDisplay).format(number).rstrip('0').rstrip('.')
+        formatted = ("{:.%sf}" % numberOfDigitsToDisplay).format(number).rstrip('0').rstrip('.')
+        if formatted == "-0":
+            formatted = "0"
+        return formatted 

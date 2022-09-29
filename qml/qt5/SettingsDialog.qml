@@ -107,7 +107,7 @@ UM.Dialog {
 
             UM.CheckBox
             {
-                id: includeSnapshotCheckbox
+                id: includeObjectDetails
 
                 checked: UM.Preferences.getValue("3d_print_log/include_object_details")
                 onClicked: UM.Preferences.setValue("3d_print_log/include_object_details",  checked)
