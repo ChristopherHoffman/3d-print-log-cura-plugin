@@ -103,6 +103,24 @@ UM.Dialog {
             width: childrenRect.width;
             height: childrenRect.height;
 
+            text: "Include object names, position, and scale information in the notes."
+
+            UM.CheckBox
+            {
+                id: includeObjectDetails
+
+                checked: UM.Preferences.getValue("3d_print_log/include_object_details")
+                onClicked: UM.Preferences.setValue("3d_print_log/include_object_details",  checked)
+
+                text: "Include Object Details in Notes"
+            }
+        }
+
+        UM.TooltipArea
+        {
+            width: childrenRect.width;
+            height: childrenRect.height;
+
             text: "Should we display a prompt after saving gcode?"
 
             GridLayout

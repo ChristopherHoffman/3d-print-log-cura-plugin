@@ -113,6 +113,11 @@ class PrintLogUploader(QObject, Extension):
             "always_ask"
         )
 
+        self._application.getPreferences().addPreference(
+            "3d_print_log/include_object_details",
+            True
+        )
+
         # Transfer deprecated bypass_prompt to the new combobox value:
         bypass_prompt = self._application.getPreferences().getValue(
                 "3d_print_log/bypass_prompt")
@@ -197,6 +202,8 @@ class PrintLogUploader(QObject, Extension):
             settings.update(self._getCuraMetadata())
             settings.update(self._getPrintTime())
             settings.update(self._getMaterialUsage())
+            settings.update(self._getMachineMetadata())
+            settings.update(self._getModelInformation())
 
             preferences = self._application.getInstance().getPreferences()
             include_snapshot = preferences.getValue(
@@ -426,6 +433,47 @@ class PrintLogUploader(QObject, Extension):
 
         return data
 
+    def _getMachineMetadata(self):
+        ''' Returns metadata about the currently active machine '''
+        machine_manager = self._application.getMachineManager()
+        global_stack = machine_manager.activeMachine
+
+        data = dict()
+        data["definition_id"] = global_stack.definition.getId()
+        data["name"] = global_stack.definition.getName()
+        data["manufacturer"] = global_stack.definition.getMetaDataEntry("manufacturer", "")
+
+        return data
+    
+    def _getModelInformation(self):
+        data = dict()
+        data["models"] = []
+
+        # Listing all files placed on the build plate
+        for node in DepthFirstIterator(self._application.getController().getScene().getRoot()):
+            if node.callDecoration("isSliceable"):
+                model = dict()
+
+                bounding_box = node.getBoundingBox()
+                model["name"] = node.getName()
+
+
+
+                if not bounding_box:
+                    continue
+                model["bounding_box"] = {
+                    "translation": {"x": bounding_box.center.x,
+                                "y":bounding_box.center.z,
+                                "z":bounding_box.bottom},
+                    "scale": {"x": bounding_box.width,
+                            "y": bounding_box.depth,
+                            "z": bounding_box.height}
+                                    }
+
+                data["models"].append(model)
+
+        return data
+
     def _getPrintTime(self):
         '''Returns the estimated print time in seconds.'''
         data = dict()
@@ -500,6 +548,11 @@ class PrintLogUploader(QObject, Extension):
 
             if (len(materials) > 0):
                 notes = notes + "Filament: " + ", ".join(materials) + "\n\n"
+
+        # Add Model Dimensions
+        include_object_details = preferences.getValue("3d_print_log/include_object_details")
+        if (include_object_details):
+            notes = notes + self._getObjectNotes()
 
         # Add settings to the notes.
         notes = notes + "Settings:\n"
@@ -617,3 +670,36 @@ class PrintLogUploader(QObject, Extension):
             isFirst = False
 
         return result
+
+    def _getObjectNotes(self) -> str:
+        notes = ""
+
+        models = self._getModelInformation()
+
+        if len(models["models"]) > 0:
+            notes = notes + "Objects:\n"
+
+        for model in models["models"]:
+            notes = notes + "  " + model["name"] + "\n"
+
+            translation = model["bounding_box"]["translation"]
+            notes = notes + "    Move: " + self._formatNumber(translation["x"], 4) + " x, " \
+                +  self._formatNumber(translation["y"], 4) + " y, " \
+                +  self._formatNumber(translation["z"], 4) + " z\n"
+            
+            scale = model["bounding_box"]["scale"]
+            notes = notes + "    Scale: " + self._formatNumber(scale["x"], 4) + " x, " \
+                + self._formatNumber(scale["y"], 4) + " y, " \
+                + self._formatNumber(scale["z"], 4) + " z\n"
+
+        if len(models["models"]) > 0:
+            notes = notes + "\n\n"
+        
+        return notes
+    
+    def _formatNumber(self, number, numberOfDigitsToDisplay) -> str:
+        '''Formats a number to the specified number of digits, trimming any trailing 0's'''
+        formatted = ("{:.%sf}" % numberOfDigitsToDisplay).format(number).rstrip('0').rstrip('.')
+        if formatted == "-0":
+            formatted = "0"
+        return formatted 
