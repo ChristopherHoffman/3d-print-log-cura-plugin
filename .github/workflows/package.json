@@ -1,0 +1,16 @@
+{
+  "author": {
+    "author_id": "ChristopherHoffman",
+    "display_name": "Christopher Hoffman",
+    "email": "hello@3dprintlog.com",
+    "website": "https://www.3dpringlog.com"
+  },
+  "description": "Send Print details to 3D Print Log",
+  "display_name": "3D Print Log Uploader",
+  "package_id": "3dPrintLogUploader",
+  "package_type": "plugin",
+  "package_version": "0.0.0",
+  "sdk_version": 0,
+  "sdk_version_semver": "0.0.0",
+  "website": "https://github.com/ChristopherHoffman/3d-print-log-cura-plugin"
+}
